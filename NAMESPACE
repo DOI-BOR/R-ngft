@@ -1,0 +1,2 @@
+useDynLib(rgft, .registration = TRUE)
+exportPattern("^[[:alpha:]]+")
