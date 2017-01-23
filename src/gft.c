@@ -12,6 +12,13 @@
  */
 
 #include "gft.h"
+
+#ifdef DllImport
+#  undef DllImport
+#  define DllImport DllExport
+# endif
+#include "gft_proto.h"
+
 #include "fftw3.h"
 #include <stdlib.h>
 #include <string.h>
@@ -20,7 +27,7 @@
 #define PI 3.1415926535897931
 
 
-void fft(int N, double *in, int stride) {
+static void fft(int N, double *in, int stride) {
 	fftw_plan p;
 	p = fftw_plan_many_dft(1,&N, 1, (fftw_complex *)in, NULL, stride, 0, (fftw_complex *)in, NULL, stride, 0, FFTW_FORWARD, FFTW_ESTIMATE);
 	fftw_execute(p);
@@ -28,7 +35,7 @@ void fft(int N, double *in, int stride) {
 }
 
 
-void ifft(int N, double *in, int stride) {
+static void ifft(int N, double *in, int stride) {
 	int i;
 	fftw_plan p;
 	p = fftw_plan_many_dft(1,&N, 1, (fftw_complex *)in, NULL, stride, 0, (fftw_complex *)in, NULL, stride, 0, FFTW_BACKWARD, FFTW_ESTIMATE);
@@ -41,7 +48,7 @@ void ifft(int N, double *in, int stride) {
 }	
 
 
-void cmul(double *x, double *y) {
+static void cmul(double *x, double *y) {
 	double ac, bd, abcd;
 	ac = x[0]*y[0];
 	bd = x[1]*y[1];
@@ -51,13 +58,13 @@ void cmul(double *x, double *y) {
 }
 
 
-void cmulByReal(double *x, double multiplier) {
+static void cmulByReal(double *x, double multiplier) {
 	x[0] *= multiplier;
 	x[1] *= multiplier;
 }
 
 
-void shift(double *sig, int N, int amount) {
+static void shift(double *sig, int N, int amount) {
 	double *temp;
 	int i,j;
 	
@@ -74,7 +81,7 @@ void shift(double *sig, int N, int amount) {
 }
 
 
-void gaussian(double *win, int N, int freq) {
+DllExport void gaussian(double *win, int N, int freq) {
 	int i;
 	double x;
 	double sum;
@@ -93,7 +100,7 @@ void gaussian(double *win, int N, int freq) {
 }
 
 
-void box(double *win, int N, int freq) {
+DllExport void box(double *win, int N, int freq) {
 	int i;
 	for (i = 0; i < N*2; i+=2) {
 		win[i] = 1.0;
@@ -102,12 +109,12 @@ void box(double *win, int N, int freq) {
 }
 
 
-int gft_1dSizeOfPartitions(unsigned int N) {
+DllExport int gft_1dSizeOfPartitions(unsigned int N) {
 	return round(log2(N))*2+1;
 }
 
 
-int *gft_1dPartitions(unsigned int N) {
+DllExport int *gft_1dPartitions(unsigned int N) {
 	int sf = 1;
 	int ef = 2;
 	int cf = 1;
@@ -142,17 +149,17 @@ int *gft_1dPartitions(unsigned int N) {
 }
 
 
-int *gft_1dMusicPartitions(unsigned int N, float samplerate, int cents) {
+DllExport int *gft_1dMusicPartitions(unsigned int N, float samplerate, int cents) {
 	int i;
 	int *partitions;
-	float freq;
-	float fSpacing = samplerate / (0.0+N);
-	float reference = 110.0;
-	float logreference = log(reference) / log(2.0);
-	float logcent = 1./1200.;
-	float logdelta = logcent * cents;
-	float max = log(samplerate/2.) / log(2.);
-	float min = logreference - (logdelta * floor(logreference / logdelta));
+	double freq;
+	double fSpacing = samplerate / (0.0+N);
+	double reference = 110.0;
+	double logreference = log(reference) / log(2.0);
+	double logcent = 1./1200.;
+	double logdelta = logcent * cents;
+	double max = log(samplerate/2.) / log(2.);
+	double min = logreference - (logdelta * floor(logreference / logdelta));
 	
 	while (pow(2,min+logdelta) - pow(2,min) < fSpacing) {
 		min += logdelta;
@@ -171,7 +178,7 @@ int *gft_1dMusicPartitions(unsigned int N, float samplerate, int cents) {
 }
 
 
-double *windows(int N, windowFunction *window){
+DllExport double *windows(int N, windowFunction *window){
 	int fstart, fcentre, fwidth, fend;
 	double *fband, *fbandminus;
 	double *win, *temp;
@@ -219,7 +226,7 @@ double *windows(int N, windowFunction *window){
 }
 
 
-double *windowsFromPars(int N, windowFunction *window, int *pars){
+DllExport double *windowsFromPars(int N, windowFunction *window, int *pars){
 	int fstart, fcentre, fwidth, fend;
 	double *fband;
 	double *win, *temp;
@@ -273,7 +280,7 @@ double *windowsFromPars(int N, windowFunction *window, int *pars){
 
 
 
-void gft_1dComplex64(double *signal, unsigned int N, double *win, int *pars, int stride) {
+DllExport void gft_1dComplex64(double *signal, unsigned int N, double *win, int *pars, int stride) {
 	int fstart, fend, fcount;
 	double *fband;
 	int i;
@@ -299,7 +306,7 @@ void gft_1dComplex64(double *signal, unsigned int N, double *win, int *pars, int
 }
 
 
-void gft_2dComplex64(double *image, unsigned int N, unsigned int M, windowFunction *window) {
+DllExport void gft_2dComplex64(double *image, unsigned int N, unsigned int M, windowFunction *window) {
 	int row, col;
 	double *win;
 	int *pars;
@@ -317,7 +324,7 @@ void gft_2dComplex64(double *image, unsigned int N, unsigned int M, windowFuncti
 }
 
 
-void gft_1d_shift(double *signal, unsigned int N, unsigned int shiftBy) {
+DllExport void gft_1d_shift(double *signal, unsigned int N, unsigned int shiftBy) {
 	double *temp;
 	int i,shiftTo;
 	
@@ -333,7 +340,7 @@ void gft_1d_shift(double *signal, unsigned int N, unsigned int shiftBy) {
 }
 
 
-double *gft_1d_interpolateNN(double *signal, unsigned int N, unsigned int M) {
+DllExport double *gft_1d_interpolateNN(double *signal, unsigned int N, unsigned int M) {
 	double *image,*temp;
 	int factor;
 	int f, t;
