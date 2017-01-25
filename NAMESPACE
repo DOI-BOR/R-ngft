@@ -1,2 +1,4 @@
+# don't remove this line
+useDynLib("libfftw3-3")
 useDynLib(rgft, .registration = TRUE)
 exportPattern("^[[:alpha:]]+")

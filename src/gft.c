@@ -85,7 +85,7 @@ DllExport void gaussian(double *win, int N, int freq) {
 	int i;
 	double x;
 	double sum;
-	for (i = 0; i<N*2; i+=2) {
+	for (sum=0, i = 0; i<N*2; i+=2) {
 		x = i / (N*2+0.0);
 		win[i] = abs(freq)/sqrt(2*PI)*exp(-pow((x-0.5),2)*pow(freq,2)/2.0);
 		win[i+1] = 0.0;
@@ -124,7 +124,7 @@ DllExport int *gft_1dPartitions(unsigned int N) {
 	int *partitions;
 	int sp,ep,sn,en;
 	
-	partitions = (int *)malloc(sizeof(int)*round(log2(N))*2+1);
+	partitions = (int *)malloc(sizeof(int)*gft_1dSizeOfPartitions(N));
 	pOff = round(log2(N))*2-1;
 	
 	while (sf < N/2) {
@@ -341,7 +341,7 @@ DllExport void gft_1d_shift(double *signal, unsigned int N, unsigned int shiftBy
 
 
 DllExport double *gft_1d_interpolateNN(double *signal, unsigned int N, unsigned int M) {
-	double *image,*temp;
+	double *image,*temp = NULL;
 	int factor;
 	int f, t;
 	int fstart, fwidth, fcentre, fend, twidth, downBy;
@@ -349,10 +349,12 @@ DllExport double *gft_1d_interpolateNN(double *signal, unsigned int N, unsigned 
 	double averageR, averageminusR, averageI, averageminusI;
 	int i, iPrime;
 	
-/*	temp = (double *)malloc(N*2*sizeof(double));
+#ifdef SOMETHING
+	temp = (double *)malloc(N*2*sizeof(double));
 	memcpy(temp,signal,N*2*sizeof(double));
 	gft_1d_shift(temp,N,N/2);
-	signal = temp; */
+	signal = temp;
+#endif
 	
 	if (M == 0) M = N;
 	factor = N / (M+0.0);
@@ -422,7 +424,10 @@ DllExport double *gft_1d_interpolateNN(double *signal, unsigned int N, unsigned 
 			}
 		}
 	}
-	free(temp);
+#ifdef SOMETHING
+	if ( temp != NULL )
+		free(temp);
+#endif
 	return image;
 }
 

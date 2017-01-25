@@ -2,5 +2,8 @@
 .Rhistory
 .RData
 .Ruserdata
-src-i386
+*.o
+*.dll
+~$*
+*~src-i386
 src-x64

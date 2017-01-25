@@ -1,14 +1,16 @@
 Package: rgft
 Type: Package
-Title: Stockwell or S-Transform (General Fourier Transform)
-Version: 0.1.0
-Date: 2017-01-22
+Title: Stockwell or S-Transform (General Fourier-family Transform)
+Version: 0.1.1
+Date: 2017-01-25
 Author: Chris Wood
 Maintainer: Chris Wood <cwood@usbr.gov>
-Description: R wrappers for the General Fourier Transform
+Description: R wrappers for the General Fourier-family Transform
     (GFT) Library from the Brown et al (2010) package cFST-0.1.
-    The GFT is better known as the Stockwell or S Transform.
-License: What license is it under?
+    The GFT includes the Stockwell or S-Transform.
+License: GPL (>=3)
 Encoding: UTF-8
 LazyData: true
 NeedsCompilation: yes
+SystemRequirements: fftw3 (>= 3.1.2)
+RoxygenNote: 5.0.1
