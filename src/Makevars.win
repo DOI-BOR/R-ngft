@@ -1,0 +1,18 @@
+# ARCH-dependent path to FFTW dll and include files
+ifeq "$(WIN)" "64"
+  FFTW_DIR_ARCH=fftw-3.3.5-dll64
+else
+  FFTW_DIR_ARCH=fftw-3.3.5-dll32
+endif
+LIB_FFTW_DIR=../../../Downloads/$(FFTW_DIR_ARCH)
+
+LIB_FFTW=fftw3-3
+LIB_FFTW_DLL=$(LIB_FFTW_DIR)/lib$(LIB_FFTW).dll
+
+PKG_CPPFLAGS=-I$(LIB_FFTW_DIR)
+PKG_LIBS=-L$(LIB_FFTW_DIR) -l$(LIB_FFTW)
+
+all: $(SHLIB) fftw
+
+fftw:
+	@cp $(LIB_FFTW_DLL) .

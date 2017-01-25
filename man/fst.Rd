@@ -2,7 +2,7 @@
 % Please edit documentation in R/fst.R
 \name{fst}
 \alias{fst}
-\title{Fast S-Transform.}
+\title{Fast S-Transform}
 \usage{
 fst(xt, dt = 0.01, gauss = NA)
 }
@@ -29,11 +29,18 @@ This function is a wrapper for the Generalized Fourier Family Transform (GFT)
 library \url{https://sourceforge.net/projects/fst-uofc/}.
 }
 \seealso{
-\url{https://en.wikipedia.org/wiki/S_transform}
-\url{http://ieeexplore.ieee.org/document/492555/}
-\url{http://www.sciencedirect.com/science/article/pii/S1051200406000546}
-\url{http://ieeexplore.ieee.org/document/5184926/}
-\url{https://sourceforge.net/projects/fst-uofc/}
+\itemize{
+\item \href{https://en.wikipedia.org/wiki/S_transform}{Wikipedia}
+\item \href{http://ieeexplore.ieee.org/document/492555/}{Stockwell et al, 1996}
+Localization of the complex spectrum: the S transform.
+\item \href{http://www.sciencedirect.com/science/article/pii/S1051200406000546}{Stockwell, 2007}
+A basis for efficient representation of the S-transform.
+\item \href{http://ieeexplore.ieee.org/document/5184926/}{Brown et al, 2009}
+A General Description of Linear Time-Frequency Transforms
+and Formulation of a Fast, Invertible Transform That Samples the Continuous
+S-Transform Spectrum Nonredundantly.
+\item \href{https://sourceforge.net/projects/fst-uofc/}{GFT library at SourceForge}
+}
 }
 \keyword{ts}
 
