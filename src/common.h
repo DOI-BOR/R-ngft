@@ -91,11 +91,3 @@ typedef int BOOL;
 #ifndef FALSE
 # define FALSE (0)
 #endif
-
-/* define complex type */
-typedef struct cmplx {
-	double a;	/* amplitude */
-	double p;	/* phase */
-} CMPLX;
-
-
