@@ -87,8 +87,8 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_i, SEXP ima
 	SET_STRING_ELT(win_name, 0, mkChar(gaussian_window ? "Gaussian" : "Box"));
 
 	/* put the return values into a list */
-	ret_l = PROTECT(allocVector(VECSXP, 9)); pcnt++;
-	names_s = PROTECT(allocVector(VECSXP, 9)); pcnt++;
+	ret_l = PROTECT(allocVector(VECSXP, 7)); pcnt++;
+	names_s = PROTECT(allocVector(VECSXP, 7)); pcnt++;
 	SET_VECTOR_ELT(ret_l, 0, cts_st); SET_VECTOR_ELT(names_s, 0, mkChar("DST"));
 	SET_VECTOR_ELT(ret_l, 1, cts_img); SET_VECTOR_ELT(names_s, 1, mkChar("image"));
 	SET_VECTOR_ELT(ret_l, 2, img_wd); SET_VECTOR_ELT(names_s, 2, mkChar("wd"));
@@ -106,6 +106,70 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_i, SEXP ima
 	ngft_FreeTimePartitions(tpcol);
 	freeIlist(f_centers);
 	freeIlist(t_centers);
+
+	return ret_l;
+}
+
+
+DllExport SEXP CALLngft_1dComplex64Inv(SEXP dst_c, SEXP dt_d, SEXP gauss_i)
+{
+	int ii, pcnt = 0;
+	DCMPLX *cts;
+	Rcomplex *ctp;
+	SEXP cts_ts;
+	SEXP win_name;
+	SEXP ret_l, names_s;
+	int stride;
+	windowFunction *window_fn;
+	FPCOL *partitions;
+
+	Rcomplex *dst = COMPLEX(dst_c);
+	int n_samples = length(dst_c);
+	double dt = ! R_FINITE(asReal(dt_d)) ? .005 : REAL(dt_d)[0];
+	BOOL gaussian_window = asLogical(gauss_i) == NA_LOGICAL ? TRUE : LOGICAL(gauss_i)[0];
+
+	if ( n_samples < 3 )
+		error("S-transform must have at least 3 points");
+	if ( dt <= 0 )
+		error("dt must be positive");
+
+	/* initialize */
+	window_fn = gaussian_window ? gaussian : box;
+	partitions = ngft_DyadicPartitions(n_samples);
+	ngft_AddWindowsToParts(partitions, window_fn);
+	stride = 1;
+
+	if ( (cts = calloc( n_samples, sizeof( *cts ) )) == NULL )
+		oops( "CALLngft_1dComplex64Inv","can't get space" );
+	for ( ii = 0 ; ii < n_samples ; ii++ ) {
+		cts[ii].r = dst[ii].r;
+		cts[ii].i = dst[ii].i;
+	}
+
+	// Call 1D GFT Inverse Function
+	ngft_1dComplex64Inv(cts, partitions, stride);
+
+	/* allocate space for R structures for complex time series, and copy inv_gft output */
+	cts_ts = PROTECT(allocVector(CPLXSXP, n_samples)); pcnt++;
+	ctp = COMPLEX(cts_ts);
+	for ( ii = 0 ; ii < n_samples ; ii++ ) {
+		ctp[ii].r = cts[ii].r;
+		ctp[ii].i = cts[ii].i;
+	}
+	win_name = PROTECT(allocVector(STRSXP, 1)); pcnt++;
+	SET_STRING_ELT(win_name, 0, mkChar(gaussian_window ? "Gaussian" : "Box"));
+
+	/* put the return values into a list */
+	ret_l = PROTECT(allocVector(VECSXP, 2)); pcnt++;
+	names_s = PROTECT(allocVector(VECSXP, 2)); pcnt++;
+	SET_VECTOR_ELT(ret_l, 0, cts_ts); SET_VECTOR_ELT(names_s, 0, mkChar("TS"));
+	SET_VECTOR_ELT(ret_l, 1, win_name); SET_VECTOR_ELT(names_s, 1, mkChar("win"));
+	setAttrib(ret_l, R_NamesSymbol, names_s);
+
+	UNPROTECT(pcnt);
+
+	free(cts);
+	ngft_FreeFreqPartitions(partitions);
 
 	return ret_l;
 }

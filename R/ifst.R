@@ -1,16 +1,13 @@
-#' Fast S-Transform
+#' Fast Inverse S-Transform
 #'
-#' \code{fst} is used to compute the fast S-transform of a real,
-#' univariate time series.
+#' \code{ifst} is used to compute the fast inverse S-transform of a complex,
+#' univariate S-transform.
 #'
-#' @param xt Equally-sampled input time series. Must convert to numeric vector.
+#' @param fst Fast S-transform. Must convert to complex vector.
 #' @param dt Sample interval, in seconds. Default is 0.01.
 #' @param gauss TRUE for Gaussian windows, FALSE for Box windows. Default is TRUE.
-#' @param img_dim Image dimension of transform, in pixels. Default is usually best.
-#' @return A list including the complex S-transform of the data, an image sampled on
-#' the time and freq partition centers (usually small in dimension), the height and width
-#' of the image, the frequency-partition centers, the time-partition centers, and
-#' a the window type used.
+#' @return A list including the complex time series of the data, and
+#' the window type used.
 #' @details If Gaussian windows are selected, the results are discrete S-transforms.
 #' If Box windows are selected, the results are discrete orthonormal S-transforms,
 #' with critical sampling in both frequency and time/space dimensions.
@@ -30,15 +27,15 @@
 #' \item \href{https://sourceforge.net/projects/fst-uofc/}{GFT library at SourceForge}
 #' }
 #' @keywords ts
-fst <- function(xt, dt=0.01, gauss=NA, img_dim=NA) {
+ifst <- function(dst, dt=0.01, gauss=NA) {
 
-	xt <- as.double(xt[!is.na(xt)])
-	len <- length(xt)
-	if ( len < 3 )
-		stop("input time series must have at least 3 valid points")
+  xt <- as.double(xt[!is.na(xt)])
+  len <- length(xt)
+  if ( len < 3 )
+    stop("input time series must have at least 3 valid points")
 
-	# call C function
-	out <- .Call("CALLngft_1dComplex64",
-							 as.double(xt), as.double(dt), as.logical(gauss), as.integer(img_dim))
-	return(out)
+  # call C function
+  out <- .Call("CALLngft_1dComplex64Inv",
+               as.complex(dst), as.double(dt), as.logical(gauss))
+  return(out)
 }

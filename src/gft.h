@@ -1,6 +1,7 @@
 #pragma once
 
 #include "common.h"
+#include "fftw3.h"
 
 /*
  *  gft.h
@@ -33,6 +34,9 @@ typedef DCMPLX *(windowFunction)(int,int);
 #define NONNEG_F_IND(f,N)	MIN(MAX(0, (f)), (N)/2)
 // Get the bounded index for a negative frequency -|f| in an array of length N, where N can be odd or even
 #define NEG_F_IND(f,N)	MIN(MAX((N) - ABS(f), (N)/2 + 1), (N) - 1)
+// convert an index to a frequency; assumes 0 <= f < N
+#define INDEX_2_FREQ(i,N)	((i) <= (N)/2 ? (i) : (i) - (N))
+#define FREQ_2_INDEX(f,N) ((f) < 0 ? (N) - ABS(f) : (f))
 
 // structure defining a time partition
 typedef struct {
