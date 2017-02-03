@@ -15,18 +15,18 @@ DllExport void ngft_AddWindowsToParts(FPCOL *pars, windowFunction *window_fn);
 DllExport TPCOL *ngft_TimePartitions(FPCOL *pars);
 DllExport void ngft_FreeFreqPartitions(FPCOL *pars);
 DllExport void ngft_FreeTimePartitions(TPCOL *tpcol);
-DllExport void freeIlist( ILIST *ilist );
-DllExport void freeDImage( DIMAGE *image );
+DllExport void freeIlist(ILIST *ilist);
+DllExport void freeDImage(DIMAGE *image);
 
 // 1D GFT Functions
 DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, int stride);
-DllExport void ngft_1dComplex64Inv(DCMPLX *signal, FPCOL *pars, int stride);
+DllExport void ngft_1dComplex64Inv(DCMPLX *dst, FPCOL *pars, int stride);
 
 // 2D GFT Functions
 DllExport void ngft_2dComplex64(DCMPLX *image, int N, int M, windowFunction *window_fn);
 
 // Interpolation functions
-DllExport DIMAGE *ngft_1d_interpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M);
-DllExport DIMAGE *ngft_1d_logfInterpolateNN( DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M );
-DllExport ILIST *getFreqCenters( FPCOL *pars );
-DllExport ILIST *getTimeCenters( TPCOL *tpcol );
+DllExport DIMAGE *ngft_1d_interpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M, BOOL make_ind_map);
+DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M, BOOL make_ind_map);
+DllExport ILIST *getFreqCenters(FPCOL *pars);
+DllExport ILIST *getTimeCenters(TPCOL *tpcol);

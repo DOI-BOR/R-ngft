@@ -140,27 +140,33 @@ int main( int argc, char **argv ) {
 		fprintf( outfile, "%10.3e %10.3e\t %9.3e\n", cts[ii].r, cts[ii].i, modulus(cts+ii) );
 
 	if ( do_image ) {
+		BOOL do_log = TRUE, make_ind_map = FALSE;
 		// get complex image
 		tpcol = ngft_TimePartitions( partitions );
 		print_time_partitions(tpcol);
 
-		image = ngft_1d_logfInterpolateNN( cts, partitions, tpcol, image_dim );
+		image_dim = -1;
+		if ( do_log )
+			image = ngft_1d_logfInterpolateNN(cts, partitions, tpcol, image_dim, make_ind_map);
+		else
+			image = ngft_1d_interpolateNN(cts, partitions, tpcol, image_dim, make_ind_map);
 
 		// get time and frequency centers
 		f_centers = getFreqCenters( partitions );
 		t_centers = getTimeCenters( tpcol );
 
+		fprintf( stderr, "\n%s:\n", make_ind_map ? "Index map" : "Image" );
 		for ( ii = 0 ; ii < image->ht ; ii++ ) {
 			int jj;
-			fprintf( stderr, "%3d: ", f_centers->values[ii] );
+			fprintf( outfile, "%3d: ", do_log ? f_centers->values[ii] : image_dim > 0 ? ROUND(ii * dcount / (double)image_dim) : ii);
 			for ( jj = 0 ; jj < image->wd ; jj++ )
-				fprintf( stderr, " %8.1e", modulus( image->img->values + ii*image->wd + jj ) );
-			fprintf( stderr, "\n" );
+				fprintf( outfile, " %8.1e", modulus( image->img->values + ii*image->wd + jj ) );
+			fprintf( outfile, "\n" );
 		}
-		fprintf( stderr, "     " );
+		fprintf( outfile, "     " );
 		for ( ii = 0 ; ii < image->wd ; ii++ )
-			fprintf( stderr, " %8d", t_centers->values[ii] );
-		fprintf( stderr, "\n" );
+			fprintf( outfile, " %8d", do_log ? t_centers->values[ii] : image_dim > 0 ? ROUND(ii * dcount / (double)image_dim) : ii);
+		fprintf( outfile, "\n" );
 	}
 
 	free(cts);
