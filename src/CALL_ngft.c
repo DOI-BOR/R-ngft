@@ -26,6 +26,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_i, SEXP ima
 	TPCOL *tpcol;
 	ILIST *f_centers;
 	ILIST *t_centers;
+	BOOL make_ind_map = FALSE;
 
 	double *ts = REAL(ts_d);
 	int n_samples = length(ts_d);
@@ -54,7 +55,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_i, SEXP ima
 
 	// get complex image
 	tpcol = ngft_TimePartitions( partitions );
-	image = ngft_1d_logfInterpolateNN(cts, partitions, tpcol, image_dim);
+	image = ngft_1d_logfInterpolateNN(cts, partitions, tpcol, image_dim, make_ind_map);
 
 	// get time and frequency centers
 	f_centers = getFreqCenters(partitions);

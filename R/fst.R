@@ -15,8 +15,8 @@
 #' If Box windows are selected, the results are discrete orthonormal S-transforms,
 #' with critical sampling in both frequency and time/space dimensions.
 #'
-#' This function is a wrapper for the Generalized Fourier Family Transform (GFT)
-#' library \url{https://sourceforge.net/projects/fst-uofc/}.
+#' This function is a wrapper for the New Generalized Fourier Family Transform (NGFT)
+#' library, a complete reimplementation of the Brown et al (2009) GFT library.
 #' @seealso \itemize{
 #' \item \href{https://en.wikipedia.org/wiki/S_transform}{Wikipedia}
 #' \item \href{http://ieeexplore.ieee.org/document/492555/}{Stockwell et al, 1996}
@@ -27,7 +27,7 @@
 #' A General Description of Linear Time-Frequency Transforms
 #' and Formulation of a Fast, Invertible Transform That Samples the Continuous
 #' S-Transform Spectrum Nonredundantly.
-#' \item \href{https://sourceforge.net/projects/fst-uofc/}{GFT library at SourceForge}
+#' \item \href{https://sourceforge.net/projects/fst-uofc/}{Original GFT library at SourceForge}
 #' }
 #' @keywords ts
 fst <- function(xt, dt=0.01, gauss=NA, img_dim=NA) {

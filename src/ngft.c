@@ -3,10 +3,11 @@
  *  The New GFT Framework
  *
  *	Written by Chris Wood on 2/1/2017
- *	This software is a complete reimplementation of the GFT
- *	framework library by Robert Brown et al (2008). It is a new
- *	implementation that is not ABI compatible with original GFT.
- *	Only the fftw wrappers and some of the function names are retained.
+ *	This software is a nearly total reimplementation of the GFT
+ *	framework library by Robert Brown et al (2008). The interface for
+ *	this new implementation is incompatible with the original GFT.
+ *	The fftw wrappers, some function names, and some general algorithms
+ *	are retained.
  *
  *  --- Original copyright notice from the GFT Framework is below
  *  >	Created by Robert Brown on 30/05/08.
@@ -98,13 +99,13 @@ static void shift(DCMPLX *sig, int N, int amount) {
 	int tsiz = sizeof( *tmp );
 
 	if ( sig == NULL || N == 0 || amount == 0 )
-		return; // do nothing
+		return; // silently do nothing
 
 	amount %= N;	// circular shifts are modulo N
 	if ( amount < 0 )
 		amount = N - ABS(amount);	// circular left shift is the same as a right shift of N - |amount|
 
-	// approach is to shift by using a single memmove of the big piece, and two memcpy of the small piece.
+	// approach is to shift by using a single memmove of the bigger piece, and two memcpy of the smaller piece.
 
 	// shift right by |amount|
 	if ( amount < N / 2 ) {
@@ -135,16 +136,18 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 	// Original GFT code set x_max = 0.5, but exp(-x) underflows for x > 708 on IEEE hardware. Thus we
 	//		need x_max * freq < sqrt(2 * 708) = 38, to avoid underflow. The largest center frequency
 	//		in a dyadic scaling is about freq_max = 3 * N / 8, so x_max must be scaled such that
-	//		x_max * freq_max < sqrt(2 * 708), or x_max < 100 / N. Select x_max < 10 / N.
+	//		x_max * freq_max < sqrt(2 * 708), or x_max < 100 / N. Select x_max <= 10 / N.
 	double x, x_max = MIN( 0.5, 10. / N );
 	double dx = 2 * x_max / (N - 1);
 	DCMPLX *win = calloc(N, sizeof( *win ));
-	BOOL N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
 	double win_sum;
+#ifdef NGFT_VERBOSE_DEBUG
+	BOOL N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
+#endif
 
-	// TODO: seems more clear to construct windows directly in the frequency domain, which
+	// TODO: seems more obvious to construct windows directly in the frequency domain, which
 	// is easy to do analytically since the FT of a Gaussian is also a Gaussian. Would
-	// need to include phase shift (for even N) corresponding to time shift of 1/2 at 0.
+	// need to include phase shift (for even N) corresponding to time shift of 1/2 at t=0.
 	// Other difference between FT and DFT will be sinc(x) convolution due to windowing over N.
 
 	// get Gaussian in time domain from -x_max to +x_max, centered at N/2
@@ -162,7 +165,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 	for ( ii = 0; ii < N ; ii++ )
 		win[ii].r /= win_sum;
 
-#ifdef VERBOSE_DEBUG
+#ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "Gaussian Window: N=%2d freq=%2d, x_max=%.3f\n", N, freq, x_max );
 	for ( ii = 0 ; ii < N ; ii++ )
 		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
@@ -174,7 +177,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 	// by N/2 is correct only for even N
 	shift(win, N, -N/2);
 
-#ifdef VERBOSE_DEBUG
+#ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "Shifted %d:\n", N/2 );
 	for ( ii = 0 ; ii < N ; ii++ )
 		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
@@ -185,18 +188,20 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 	// Note: FT of a real, even function is also a real, even function. But, see below
 	fft(N,win,1);
 
+#ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "FFT: freq=%2d\n", freq );
 	for ( ii = 0 ; ii < N ; ii++ )
 		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
 	fflush( stderr );
+#endif
 
 	// If N is odd, then index 0 will be exactly at time 0, and the imaginary part of
 	// the DFT output indeed seems to be about 1e-14 less than the real, as expected.
 	// If N is even, however, then time 0 is shifted by 1/2 of a sample period from index 0,
 	// which introduces a phase shift, so the imaginary parts won't be zero.
 
-#ifdef VERBOSE_DEBUG
-	// For even N, should we therefore replace the real part with the modulus, and set imaginary
+#ifdef NGFT_TEST_FORCE_REAL
+	// For even N, should I therefore replace the real part with the modulus, and set imaginary
 	// part to 0? Window won't be exactly symmetric, but it will be real.
 	// Tests indicate that NOT doing this performs better for the fwd -> inv test. Also, going to
 	// an odd value of N didn't improve the fwd -> inv test results
@@ -211,7 +216,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 	// right-shift frequency window so that 0-index is centered at freq (positive or negative)
 	shift(win, N, FREQ_2_INDEX(freq,N));
 
-#ifdef VERBOSE_DEBUG
+#ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "Final FFT after shift and setting to real: freq=%2d\n", freq );
 	for ( ii = 0 ; ii < N ; ii++ )
 		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
@@ -320,7 +325,7 @@ DllExport FPCOL *ngft_DyadicPartitions(int N) {
 // This function compiles, but has not been tested by me (CWood)
 DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 	int ii, ii_max, pcount, n_pcount;
-	FPART *p, *partitions, *np, *n_partitions;
+	FPART *p, *partitions, *np, *n_partitions, *tmp;
 	FPCOL *partition_set;
 
 	double fSpacing;
@@ -371,6 +376,13 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 			np->win_len = 0;
 		}
 	}
+
+	// reverse the order of the negative partitions to be consistent with normal frequency ordering
+	tmp = calloc( n_pcount, sizeof( *tmp ) );
+	for ( fs = n_pcount ; fs > 0 ; fs-- )
+		memcpy(tmp + n_pcount - fs, n_partitions + fs - 1, sizeof( *n_partitions ));
+	memcpy( n_partitions, tmp, n_pcount * sizeof( *tmp ) );
+	free( tmp );
 
 	partition_set = calloc(1, sizeof(*partition_set));
 	partition_set->N = N;
@@ -513,7 +525,6 @@ DllExport FPCOL *ngft_MakePartsAndWindows(int N, windowFunction *window_fn) {
 DllExport void ngft_AddWindowsToParts(FPCOL *pars, windowFunction *window_fn) {
 	int ii;
 	int N;
-	BOOL N_is_odd;
 
 	if ( pars == NULL )
 		oops("ngft_AddWindowsToParts", "Invalid argument: pars is NULL");
@@ -521,7 +532,6 @@ DllExport void ngft_AddWindowsToParts(FPCOL *pars, windowFunction *window_fn) {
 		window_fn = gaussian;
 
 	N = pars->N;
-	N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
 
 	// loop over the non-negative (index 0) and the negative (index 1)
 	// frequency partition sets. Ordering doesn't matter
@@ -718,7 +728,7 @@ static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt) {
 							// search for the partition with matching time
 							TPART *tpart = tdset->partitions + ll;
 							if ( tpart->start <= t_target && t_target <= tpart->end )
-								return ind;	// Eureka!
+								return ind;	// cool
 						}
 					}
 				}
@@ -727,7 +737,7 @@ static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt) {
 			}
 		}
 	}
-	return -1;
+	return -1;	// bummer
 }
 
 
@@ -887,13 +897,13 @@ DllExport ILIST *getTimeCenters( TPCOL *tpcol ) {
 
 
 // Make a 2D time-frequency image using linear spacing in time and log spacing
-// in frequency (non-negative frequencies only) using a nearest neighbor sampling
-// of the fast S transform. The frequencies will be the centers of the frequency
-// partitions, and the times will be the centers of the time partition with the greatest
-// number of partitions. If the original signal was N points long, the image will
-// be log2N x log2N. Optionally, if 0 < M <= log2N is specified, then the image will be
-// down-sampled to M in time (can set M<=0 to use default)
-// If make_ind_map is TRUE, than the image will consist of the corresponding indicies of the transform
+// in frequency using a nearest neighbor sampling of the fast S transform. The
+// frequencies will be the centers of the frequency partitions, and the times will
+// be the centers of the time partition with the greatest number of partitions. If
+// the original signal was N points long, the image will be roughly log2N x log2N.
+// Optionally, if 0 < M <= log2N is specified, then the image will be down-sampled
+// to M in time (can set M<=0 to use default) If make_ind_map is TRUE, than the image
+// will consist of the corresponding indicies of the transform
 DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M, BOOL make_ind_map) {
 	int ii, f_dim, nf_dim, t_dim, nt_dim, img_len, N;
 	ILIST *f_centers;

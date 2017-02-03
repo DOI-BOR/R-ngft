@@ -7,8 +7,8 @@ Author: Chris Wood
 Maintainer: Chris Wood <cwood@usbr.gov>
 Description: R wrappers for the New General Fourier-family Transform
     (NGFT) Library, a complete reimplementation of the Brown et al (2010)
-    package cFST-0.1.
-    The GFT includes the S-Transform (a.k.a. Stockwell Transform) and
+    package cFST-0.1. NGFT is included in this package.
+    The GFT includes the Fast Discrete S-Transform (a.k.a. Stockwell Transform) and
     its inverse.
 License: GPL (>=3)
 Encoding: UTF-8

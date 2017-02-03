@@ -1,3 +1,5 @@
+#ifdef TEST_NGFT
+
 #include "ngft.h"
 #include "ngft_proto.h"
 
@@ -51,7 +53,6 @@ int main( int argc, char **argv ) {
 	char *progname, *cp;
 	char line[2048];
 	int ii, line_no, dcount;
-	double dt = 0.01;
 	DCMPLX *cts;
 	DIMAGE *image;
 	FILE *infile = stdin, *outfile = stdout;
@@ -117,7 +118,7 @@ int main( int argc, char **argv ) {
 		return 1;
 
 	if ( sizeof( DCMPLX ) != sizeof( fftw_complex ) ) {
-		fprintf( stderr, "Warning: sizeof(DCMPLX) = % is not equal to sizeof(fftw_complex) = %d",
+		fprintf( stderr, "Warning: sizeof(DCMPLX) = %d is not equal to sizeof(fftw_complex) = %d",
 						 sizeof( DCMPLX ), sizeof( fftw_complex ) );
 		fflush( stderr );
 	}
@@ -180,3 +181,4 @@ int main( int argc, char **argv ) {
 
 	return 0;
 }
+#endif
