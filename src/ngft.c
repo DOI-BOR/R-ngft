@@ -1,25 +1,30 @@
 /*
- *  gft.c
- *  GFT Framework
+ *  ngft.c
+ *  The New GFT Framework
  *
- *  Created by Robert Brown on 30/05/08.
- *	This software is copyright © 2010 UTI Limited Partnership.  
- *	The original authors are Robert A. Brown, M. Louis Lauzon 
- *	and Richard Frayne.  This software is licensed in the terms 
- *	set forth in the “FST License Notice.txt” file, which is 
- *	included in the LICENSE directory of this distribution.
+ *	Written by Chris Wood on 2/1/2017
+ *	This software is a complete reimplementation of the GFT
+ *	framework library by Robert Brown et al (2008). It is a new
+ *	implementation that is not ABI compatible with original GFT.
+ *	Only the fftw wrappers and some of the function names are retained.
  *
- *	Substantially modified by Chris Wood on 1/26/2017
+ *  --- Original copyright notice from the GFT Framework is below
+ *  >	Created by Robert Brown on 30/05/08.
+ *	>	This software is copyright © 2010 UTI Limited Partnership.
+ *	>	The original authors are Robert A. Brown, M. Louis Lauzon
+ *	>	and Richard Frayne.  This software is licensed in the terms
+ *	>	set forth in the “FST License Notice.txt” file, which is
+ *	>	included in the LICENSE directory of this distribution.
  *
  */
 
-#include "gft.h"
+#include "ngft.h"
 
 #ifdef DllImport
 #  undef DllImport
 #  define DllImport DllExport
 # endif
-#include "gft_proto.h"
+#include "ngft_proto.h"
 
 
 // For odd width partitions, center is unambiguous. For even width, center can be at
@@ -27,15 +32,17 @@
 BOOL left_bias = FALSE;	// FALSE seems to give better contrast for resolving impulses, and better inverse
 
 
+// fftw wrapper from original GFT library
 static void fft(int N, DCMPLX *in, int stride) {
 	fftw_plan p;
 	p = fftw_plan_many_dft(1, &N, 1, (fftw_complex *)in, NULL, stride, 0, (fftw_complex *)in,
 													NULL, stride, 0, FFTW_FORWARD, FFTW_ESTIMATE);
 	fftw_execute(p);
-	fftw_destroy_plan(p);	
+	fftw_destroy_plan(p);
 }
 
 
+// fftw wrapper from original GFT library
 static void ifft(int N, DCMPLX *in, int stride) {
 	int ii;
 	fftw_plan p;
@@ -47,9 +54,10 @@ static void ifft(int N, DCMPLX *in, int stride) {
 		in[ii*stride].r /= N;
 		in[ii*stride].i /= N;
 	}
-}	
+}
 
 
+// return the modulus of a DCMPLX value
 static double modulus( DCMPLX *x ) {
 	return sqrt( x->r*x->r + x->i*x->i );
 }
@@ -81,7 +89,7 @@ static void cmulByReal(DCMPLX *x, double multiplier) {
 }
 
 
-// Circular shift of an array of complex doubles
+// Circular shift an array of DCMPLX values
 // Shift is to the right if amount > 0, and to the left if amount < 0
 static void shift(DCMPLX *sig, int N, int amount) {
 	int len;
@@ -96,14 +104,15 @@ static void shift(DCMPLX *sig, int N, int amount) {
 	if ( amount < 0 )
 		amount = N - ABS(amount);	// circular left shift is the same as a right shift of N - |amount|
 
-	// shift by using a single memmove of the big piece, and two memcpy of the small piece.
+	// approach is to shift by using a single memmove of the big piece, and two memcpy of the small piece.
+
 	// shift right by |amount|
 	if ( amount < N / 2 ) {
 		len = amount; // length of small piece is |amount|
 		// big piece begins at offset s3 = 0, small piece begins at offset s1 = N - |amount|
 		// big piece destination is offset s2 = |amount|, small piece destination is offset s4 = 0
 		s1 = N - len; s3 = 0;
-		s2 = len; s4 = 0;	
+		s2 = len; s4 = 0;
 	} else {
 		len = N - amount; // length of small piece is N - |amount|
 		// big piece begins at offset s3 = |amount|, small piece begins at offset s1 = 0
@@ -119,9 +128,11 @@ static void shift(DCMPLX *sig, int N, int amount) {
 }
 
 
+// Create a Gaussian in the frequency domain by taking the DFT of
+// a Gaussin in the time domain with sigma = 1/freq.
 DllExport DCMPLX *gaussian(int N, int freq) {
 	int ii;
-	// Original code set x_max = 0.5, but exp(-x) underflows for x > 708 on IEEE hardware. Thus we
+	// Original GFT code set x_max = 0.5, but exp(-x) underflows for x > 708 on IEEE hardware. Thus we
 	//		need x_max * freq < sqrt(2 * 708) = 38, to avoid underflow. The largest center frequency
 	//		in a dyadic scaling is about freq_max = 3 * N / 8, so x_max must be scaled such that
 	//		x_max * freq_max < sqrt(2 * 708), or x_max < 100 / N. Select x_max < 10 / N.
@@ -135,7 +146,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 	// is easy to do analytically since the FT of a Gaussian is also a Gaussian. Would
 	// need to include phase shift (for even N) corresponding to time shift of 1/2 at 0.
 	// Other difference between FT and DFT will be sinc(x) convolution due to windowing over N.
-	
+
 	// get Gaussian in time domain from -x_max to +x_max, centered at N/2
 	for ( win_sum = 0 , ii = 0 ; ii < N ; ii++ ) {
 		double g;
@@ -199,7 +210,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 
 	// right-shift frequency window so that 0-index is centered at freq (positive or negative)
 	shift(win, N, FREQ_2_INDEX(freq,N));
-	
+
 #ifdef VERBOSE_DEBUG
 	fprintf( stderr, "Final FFT after shift and setting to real: freq=%2d\n", freq );
 	for ( ii = 0 ; ii < N ; ii++ )
@@ -316,7 +327,7 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 	double reference = 440. / (2 * 2); // make reference 2 octaves below 440 Hz
 	double logcent = 1. / (12 * 100);	// assume a 12-tone scale
 	double logdelta, minlog2f, maxlog2f;
-	
+
 	if ( N <= 0 )
 		oops( "ngft_1dMusicPartitions", "Invalid argument: N <= 0" );
 
@@ -330,7 +341,7 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 	fSpacing = samplerate / N;
 	while ( pow(2, minlog2f + logdelta) - pow(2, minlog2f) < fSpacing )
 		minlog2f += logdelta;
-	
+
 	ii_max = (int)(floor((maxlog2f - minlog2f) / logdelta)) + 1;
 	for ( partitions = NULL, n_partitions = NULL, pcount = 0, n_pcount = 0, ii = 0 ; ii < ii_max ; ii++ ) {
 		double log2f;
@@ -566,11 +577,11 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, int stride) 
 		oops( "ngft_1dComplex64", "Invalid argument: Signal is null" );
 	if ( N <= 0 && pars == NULL )
 		oops( "ngft_1dComplex64", "Invalid argument: Must specify either non-NULL pars, or N > 0" );
-	
+
 	if ( pars == NULL ) {
 		pars = ngft_MakePartsAndWindows( N, gaussian );	// N is used only if pars is NULL
 		free_pars = TRUE;
-	} else if ( N > 0 && pars->N != N ) 
+	} else if ( N > 0 && pars->N != N )
 		smsg( "ngft_1dComplex64", "Warning: Invalid argument: N in pars conflicts with argument N (ignored)" );
 	N = pars->N;
 
@@ -592,7 +603,7 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, int stride) 
 			int kk;
 			FPART *partition = fpset->partitions + jj;
 			int fstart = partition->start;
-			// apply partition window to the transformed data 
+			// apply partition window to the transformed data
 			for ( kk = 0 ; kk < partition->win_len ; kk++ ) {
 				int ff = fstart + kk;
 				cmul(signal + ff * stride, partition->window + kk);
@@ -632,7 +643,7 @@ DllExport void ngft_1dComplex64Inv( DCMPLX *dst, FPCOL *pars, int stride ) {
 			int fstart = partition->start;
 			// FFT the S-transform over this partition
 			fft(partition->width, dst + fstart * stride, stride);
-			// remove partition window from the transformed data 
+			// remove partition window from the transformed data
 			for ( kk = 0 ; kk < partition->win_len ; kk++ ) {
 				int ff = fstart + kk;
 				cdiv(dst + ff * stride, partition->window + kk);
@@ -699,7 +710,7 @@ static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt) {
 				// corresponds to this frequency-partition width
 				for ( kk = 0 ; kk < tpcol->tdcount ; kk++ ) {
 					TDSET *tdset = tpcol->tdsets + kk;
-					// check that time-partition decimation and frequency-partition width correspond 
+					// check that time-partition decimation and frequency-partition width correspond
 					if ( tdset->decimation == N / fpart->width ) {
 						// have a match, so now check all time partitions with this decimation
 						int ll;

@@ -1,5 +1,5 @@
-#include "gft.h"
-#include "gft_proto.h"
+#include "ngft.h"
+#include "ngft_proto.h"
 
 static double modulus( DCMPLX *x ) {
 	return sqrt( x->r*x->r + x->i*x->i );
@@ -18,7 +18,7 @@ static void print_freq_partitions(FPCOL *fpcol) {
 			int fstart = partition->start;
 			fprintf( stderr, "\tpartition %2d: start=%3d center=%3d end=%3d width=%3d\n",
 							 jj,fstart, partition->center, partition->end, partition->width);
-			// apply partition window to the transformed data 
+			// apply partition window to the transformed data
 			for ( kk = 0 ; kk < partition->win_len ; kk++ ) {
 				int ff = fstart + kk;
 				DCMPLX *val = partition->window + kk;

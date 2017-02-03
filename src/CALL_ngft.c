@@ -1,5 +1,5 @@
-#include "gft.h"
-#include "gft_proto.h"
+#include "ngft.h"
+#include "ngft_proto.h"
 
 /* be sure to include these last so they can override some windows defs */
 #include <R.h>
