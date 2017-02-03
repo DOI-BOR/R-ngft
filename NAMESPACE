@@ -1,7 +1,7 @@
 # don't remove this comment line or roxygen2 will have its way
 
 # load both dll's, but make sure useDynLib for rgft comes before libfftw3-3
-useDynLib(rgft, .registration = TRUE)
+useDynLib(rngft, .registration = TRUE)
 useDynLib("libfftw3-3")
 
 exportPattern("^[[:alpha:]]+")
