@@ -3,11 +3,11 @@
  *  The New GFT Framework
  *
  *	Written by Chris Wood on 2/1/2017
- *	This software is a nearly total reimplementation of the GFT
- *	framework library by Robert Brown et al (2008). The interface for
+ *	This software is a reimplementation of the GFT framework
+ *	library by Robert Brown et al (2008). The interface for
  *	this new implementation is incompatible with the original GFT.
- *	The fftw wrappers, some function names, and some general algorithms
- *	are retained.
+ *	The fftw wrappers, some function names, and a few algorithms
+ *	are retained from the original.
  *
  *  --- Original copyright notice from the GFT Framework is below
  *  >	Created by Robert Brown on 30/05/08.
@@ -133,7 +133,7 @@ static void shift(DCMPLX *sig, int N, int amount) {
 // a Gaussin in the time domain with sigma = 1/freq.
 DllExport DCMPLX *gaussian(int N, int freq) {
 	int ii;
-	// Original GFT code set x_max = 0.5, but exp(-x) underflows for x > 708 on IEEE hardware. Thus we
+	// Original GFT code used x_max = 0.5, but exp(-x) underflows for x > 708 on IEEE hardware. Thus we
 	//		need x_max * freq < sqrt(2 * 708) = 38, to avoid underflow. The largest center frequency
 	//		in a dyadic scaling is about freq_max = 3 * N / 8, so x_max must be scaled such that
 	//		x_max * freq_max < sqrt(2 * 708), or x_max < 100 / N. Select x_max <= 10 / N.
@@ -246,23 +246,24 @@ static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N) {
 	partitions = realloc(partitions, ++(*pcount) * sizeof(*partitions));
 	p = partitions + *pcount - 1;
 
-	start = NONNEG_F_IND(ABS(fs), N);
-	end = NONNEG_F_IND(2 * ABS(fs) - 1, N);
-	width = end - start + 1;
-	// for odd width, center is unambiguous. For even width, center can be at end
-	// of the left half (left_bias=T), or the start of the right half (left_bias=F).
-	center = left_bias ? end - width / 2 : start + width / 2;
 	if ( fs >= 0 ) {
 		// handle non-negative frequencies
-		p->start = start;
-		p->end = end;
-		p->center = NONNEG_F_IND(center, N);
+		start = NONNEG_F_IND(fs, N);
+		end = NONNEG_F_IND(2 * fs - 1, N);
+		width = end - start + 1;
+		// for odd width, center is unambiguous. For even width, center can be at end
+		// of the left half (left_bias=T), or the start of the right half (left_bias=F).
+		center = left_bias ? end - width / 2 : start + width / 2;
 	} else {
 		// handle negative frequencies
-		p->start = NEG_F_IND(-end, N);	// reverse start and end indices for negative
-		p->end = NEG_F_IND(-start, N);	// frequencies so that start < end for array ops
-		p->center = NEG_F_IND(-center, N);
+		start = NEG_F_IND(2 * fs + 1, N);	// reverse start and end indices for negative
+		end = NEG_F_IND(fs, N);	// frequencies so that start < end for array ops
+		width = end - start + 1;
+		center = left_bias ? start + width / 2 : end - width / 2;
 	}
+	p->start = start;
+	p->center = center;
+	p->end = end;
 	p->width = width;
 	p->window = NULL;
 	p->win_len = 0;
@@ -379,8 +380,8 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 
 	// reverse the order of the negative partitions to be consistent with normal frequency ordering
 	tmp = calloc( n_pcount, sizeof( *tmp ) );
-	for ( fs = n_pcount ; fs > 0 ; fs-- )
-		memcpy(tmp + n_pcount - fs, n_partitions + fs - 1, sizeof( *n_partitions ));
+	for ( ii = n_pcount ; ii > 0 ; ii-- )
+		memcpy(tmp + n_pcount - ii, n_partitions + ii - 1, sizeof( *n_partitions ));
 	memcpy( n_partitions, tmp, n_pcount * sizeof( *tmp ) );
 	free( tmp );
 
@@ -456,6 +457,7 @@ DllExport TPCOL *ngft_TimePartitions(FPCOL *pars) {
 	N = pars->N;
 
 	tpcol = calloc( 1, sizeof( *tpcol ) ); // note: everything in tpcol initialized to NULL or 0
+	tpcol->N = N;
 
 	// loop over the non-negative (index 0) and the negative (index 1)
 	// frequency partition sets. Ordering doesn't matter
@@ -781,7 +783,7 @@ DllExport DIMAGE *ngft_1d_interpolateNN( DCMPLX *signal, FPCOL *pars, TPCOL *tpc
 			int tt = down_sample ? ROUND( jj / factor ) : jj;
 			int kk = find_index( pars, tpcol, ff, tt );
 			if ( kk < 0 || kk >= N )
-				oops( "ngft_1d_interpolateNN", "Application error: can't find image index" );
+				oops( "ngft_1d_interpolateNN", "Application exception: can't find image index" );
 			img_ind = ii * M + jj;
 			if ( make_ind_map ) {
 				image_arr[img_ind].r = kk;	// image value is just the DST index
@@ -924,16 +926,15 @@ DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *
 	N = pars->N;
 	N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
 
-	f_dim = getFreqDim(pars);
 	t_dim = getTimeDim(tpcol);
-	if ( f_dim != t_dim + 2 + N_is_odd )
-		oops( "ngft_1d_logfInterpolateNN", "Application error: f_dim != t_dim" );
 	if ( M <= 0 )
 		M = t_dim;
 	M = MIN( M, t_dim );	// don't allow augmentation
 	down_sample = (M < t_dim);
 	factor = (double)M / t_dim;
 	nt_dim = M;
+
+	f_dim = getFreqDim(pars);
 	nf_dim = ROUND(factor * f_dim);
 
 	img_len = nf_dim * nt_dim;
@@ -953,7 +954,7 @@ DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *
 			int tt = t_centers->values[js];
 			int kk = find_index(pars, tpcol, ff, tt);
 			if ( kk < 0 || kk >= N )
-				oops( "ngft_1d_logfInterpolateNN", "Application error: can't find image index" );
+				oops( "ngft_1d_logfInterpolateNN", "Application exception: can't find image index" );
 			img_ind = ii * nt_dim + jj;
 			if ( make_ind_map ) {
 				image_arr[img_ind].r = kk;	// image value is just the DST index

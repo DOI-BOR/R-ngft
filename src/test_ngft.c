@@ -6,47 +6,48 @@
 static double modulus( DCMPLX *x ) {
 	return sqrt( x->r*x->r + x->i*x->i );
 }
-static void print_freq_partitions(FPCOL *fpcol) {
+static void print_freq_partitions(FPCOL *fpcol, FILE *ofile) {
 	int ii;
+	fprintf( ofile, "\nFrequency Partitions: N=%d\n", fpcol->N );
 	// loop over the non-negative (index 0) and the negative (index 1) frequency partition sets
 	for ( ii = 0 ; ii < 2 ; ii++ ) {
 		int jj;
 		FPSET *fpset = fpcol->fpset + ii;
 		// loop over the partitions in this set
-		fprintf( stderr, "%s frequencies:\n", ii == 0 ? "non-negative" : "negative" );
+		fprintf( ofile, "    %s frequencies:\n", ii == 0 ? "non-negative" : "negative" );
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			int kk;
 			FPART *partition = fpset->partitions + jj;
 			int fstart = partition->start;
-			fprintf( stderr, "\tpartition %2d: start=%3d center=%3d end=%3d width=%3d\n",
+			fprintf( ofile, "\tpartition %2d: start=%3d center=%3d end=%3d width=%3d\n",
 							 jj,fstart, partition->center, partition->end, partition->width);
 			// apply partition window to the transformed data
 			for ( kk = 0 ; kk < partition->win_len ; kk++ ) {
 				int ff = fstart + kk;
 				DCMPLX *val = partition->window + kk;
-				fprintf( stderr, "\t\t%3d %10.3e %10.3e\t%9.3e\n", ff, val->r, val->i, modulus(val));
+				fprintf( ofile, "\t\t%3d %10.3e %10.3e\t%9.3e\n", ff, val->r, val->i, modulus(val));
 			}
 		}
 	}
-	fflush( stderr );
+	fflush( ofile );
 }
 
-static void print_time_partitions( TPCOL* tpcol ) {
+static void print_time_partitions( TPCOL* tpcol, FILE *ofile ) {
 	int ii;
-	fprintf( stderr, "Time partitions: N=%4d, tdcount=%3d\n", tpcol->N, tpcol->tdcount);
+	fprintf( ofile, "\nTime partitions: N=%d, tdcount=%3d\n", tpcol->N, tpcol->tdcount);
 	for ( ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
 		int jj;
 		if ( tpcol->tdsets == NULL )
 			continue;
 		TDSET *tdset = tpcol->tdsets + ii;
-		fprintf( stderr, "\tSet %3d: decimation=%3d, pcount=%2d\n", ii, tdset->decimation, tdset->pcount );
+		fprintf( ofile, "\tSet %3d: decimation=%3d, pcount=%2d\n", ii, tdset->decimation, tdset->pcount );
 		for ( jj = 0 ; jj < tdset->pcount ; jj++ ) {
 			TPART* tpart = tdset->partitions + jj;
-			fprintf( stderr, "\t\tPartition %3d: start=%3d, center=%3d, end=%3d, width=%d\n",
+			fprintf( ofile, "\t\tPartition %3d: start=%3d, center=%3d, end=%3d, width=%d\n",
 							 jj, tpart->start, tpart->center, tpart->end, tpart->width );
 		}
 	}
-
+	fflush( ofile );
 }
 
 int main( int argc, char **argv ) {
@@ -127,7 +128,8 @@ int main( int argc, char **argv ) {
 	window_fn = gaussian_window ? gaussian : box;
 	partitions = ngft_DyadicPartitions(dcount);
 	ngft_AddWindowsToParts(partitions, window_fn);
-	print_freq_partitions(partitions);
+	
+	print_freq_partitions(partitions, stderr);
 
 	// Call 1D GFT Function
 	if ( do_inverse ) {
@@ -144,7 +146,8 @@ int main( int argc, char **argv ) {
 		BOOL do_log = TRUE, make_ind_map = FALSE;
 		// get complex image
 		tpcol = ngft_TimePartitions( partitions );
-		print_time_partitions(tpcol);
+
+		print_time_partitions(tpcol, stderr);
 
 		image_dim = -1;
 		if ( do_log )
@@ -156,7 +159,7 @@ int main( int argc, char **argv ) {
 		f_centers = getFreqCenters( partitions );
 		t_centers = getTimeCenters( tpcol );
 
-		fprintf( stderr, "\n%s:\n", make_ind_map ? "Index map" : "Image" );
+		fprintf( outfile, "\n%s:\n", make_ind_map ? "Index map" : "Image" );
 		for ( ii = 0 ; ii < image->ht ; ii++ ) {
 			int jj;
 			fprintf( outfile, "%3d: ", do_log ? f_centers->values[ii] : image_dim > 0 ? ROUND(ii * dcount / (double)image_dim) : ii);

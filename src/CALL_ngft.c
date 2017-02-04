@@ -39,12 +39,13 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_i, SEXP ima
 	if ( dt <= 0 )
 		error("dt must be positive");
 
-	/* initialize */
-	window_fn = gaussian_window ? gaussian : box;
+	/* create partitions */
 	partitions = ngft_DyadicPartitions(n_samples);
+	window_fn = gaussian_window ? gaussian : box;
 	ngft_AddWindowsToParts(partitions, window_fn);
-	stride = 1;
 
+	// copy the data
+	stride = 1;
 	if ( (cts = calloc( n_samples, sizeof( *cts ) )) == NULL )
 		oops( "CALLngft_1dComplex64","can't get space" );
 	for ( ii = 0 ; ii < n_samples ; ii++ )

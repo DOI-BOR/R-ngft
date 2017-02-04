@@ -16,7 +16,7 @@
 #' with critical sampling in both frequency and time/space dimensions.
 #'
 #' This function is a wrapper for the New Generalized Fourier Family Transform (NGFT)
-#' library, a complete reimplementation of the Brown et al (2009) GFT library.
+#' library, a reimplementation of the Brown et al (2009) GFT library.
 #' @seealso \itemize{
 #' \item \href{https://en.wikipedia.org/wiki/S_transform}{Wikipedia}
 #' \item \href{http://ieeexplore.ieee.org/document/492555/}{Stockwell et al, 1996}
