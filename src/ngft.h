@@ -106,7 +106,7 @@ typedef struct {
 
 // Image
 typedef struct {
-	int ht;
-	int wd;
+	ILIST *y_centers;
+	ILIST *x_centers;
 	DCLIST *img;
 } DIMAGE;

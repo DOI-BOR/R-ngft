@@ -26,7 +26,7 @@ DllExport void ngft_1dComplex64Inv(DCMPLX *dst, FPCOL *pars, int stride);
 DllExport void ngft_2dComplex64(DCMPLX *image, int N, int M, windowFunction *window_fn);
 
 // Interpolation functions
-DllExport DIMAGE *ngft_1d_interpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M, BOOL make_ind_map);
-DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M, BOOL make_ind_map);
-DllExport ILIST *getFreqCenters(FPCOL *pars);
-DllExport ILIST *getTimeCenters(TPCOL *tpcol);
+DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M,
+														BOOL by_part, BOOL all_freqs, BOOL make_ind_map);
+DllExport ILIST *freqPartitionCenters(FPCOL *pars, BOOL all_freqs);
+DllExport ILIST *timePartitionCenters(TPCOL *tpcol);

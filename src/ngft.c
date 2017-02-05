@@ -6,8 +6,6 @@
  *	This software is a reimplementation of the GFT framework
  *	library by Robert Brown et al (2008). The interface for
  *	this new implementation is incompatible with the original GFT.
- *	The fftw wrappers, some function names, and a few algorithms
- *	are retained from the original.
  *
  *  --- Original copyright notice from the GFT Framework is below
  *  >	Created by Robert Brown on 30/05/08.
@@ -109,15 +107,15 @@ static void shift(DCMPLX *sig, int N, int amount) {
 
 	// shift right by |amount|
 	if ( amount < N / 2 ) {
-		len = amount; // length of small piece is |amount|
-		// big piece begins at offset s3 = 0, small piece begins at offset s1 = N - |amount|
-		// big piece destination is offset s2 = |amount|, small piece destination is offset s4 = 0
+		len = amount; // length of smaller piece is |amount|
+		// bigger piece begins at offset s3 = 0, smaller piece begins at offset s1 = N - |amount|
+		// bigger piece destination is offset s2 = |amount|, smaller piece destination is offset s4 = 0
 		s1 = N - len; s3 = 0;
 		s2 = len; s4 = 0;
 	} else {
-		len = N - amount; // length of small piece is N - |amount|
-		// big piece begins at offset s3 = |amount|, small piece begins at offset s1 = 0
-		// big piece destination is offset s2 = 0, small piece destination is offset s4 = N - |amount|
+		len = N - amount; // length of smaller (or equivalent) piece is N - |amount|
+		// bigger piece begins at offset s3 = |amount|, smaller piece begins at offset s1 = 0
+		// bigger piece destination is offset s2 = 0, smaller piece destination is offset s4 = N - |amount|
 		s1 = 0; s3 = len;
 		s2 = 0; s4 = N - len;
 	}
@@ -699,17 +697,112 @@ DllExport void ngft_2dComplex64(DCMPLX *image, int N, int M, windowFunction *win
 }
 
 
+// free an ILIST structure
+DllExport void freeIlist( ILIST *ilist ) {
+	if ( ilist != NULL ) {
+		if ( ilist->values != NULL && ilist->count > 0 )
+			free( ilist->values );
+		free( ilist );
+	}
+}
+
+
+// get the count of frequency partitions
+static int getFreqDim( FPCOL *pars, BOOL all_freqs ) {
+	int ii, imax, f_dim;
+	// use non-negative (index 0), and optionally, negative (index 1) frequency partition sets
+	imax = all_freqs ? 2 : 1;
+	for ( f_dim = 0, ii = 0 ; ii < imax ; ii++ ) {
+		FPSET *fpset = pars->fpset + ii;
+		f_dim += fpset->pcount;
+	}
+	return f_dim;
+}
+
+
+// get the center-values of the frequency partitions, in order of the partitions
+DllExport ILIST *freqPartitionCenters(FPCOL *pars, BOOL all_freqs) {
+	int ii, imax, f_count, f_dim, N;
+	ILIST *f_centers;
+	int *values;
+
+	N = pars->N;
+	f_dim = getFreqDim(pars, all_freqs);
+	values = calloc(f_dim, sizeof(*values));
+
+	// use non-negative (index 0), and optionally, negative (index 1) frequency partition sets
+	imax = all_freqs ? 2 : 1;
+	for ( f_count = 0, ii = 0 ; ii < imax ; ii++ ) {
+		int jj;
+		FPSET *fpset = pars->fpset + ii;
+		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
+			FPART *part = fpset->partitions + jj;
+			values[f_count++] = INDEX_2_FREQ(part->center, N); // need actual frequency, not array index
+		}
+	}
+
+	f_centers = calloc( 1, sizeof( *f_centers ) );
+	f_centers->values = values;
+	f_centers->count = f_count;
+
+	return f_centers;
+}
+
+
+// get the maximum partition count over the sets of partitions with common decimation factors
+static int getTimeDim(TPCOL *tpcol) {
+	int ii, t_dim;
+	for ( t_dim = 0, ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
+		TDSET *tdset = tpcol->tdsets + ii;
+		if ( tdset->pcount > t_dim )
+			t_dim = tdset->pcount;
+	}
+	return t_dim;
+}
+
+
+// get the center-values of the time-partition with the most partitions, in order of the partitions
+DllExport ILIST *timePartitionCenters( TPCOL *tpcol ) {
+	int ii, t_dim;
+	TDSET *tdset_max;
+	ILIST *t_centers;
+	int *values;
+
+	// find the partition set with max number of partitions
+	for ( t_dim = 0, tdset_max = NULL, ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
+		TDSET *tdset = tpcol->tdsets + ii;
+		if ( tdset->pcount > t_dim ) {
+			t_dim = tdset->pcount;
+			tdset_max = tdset;
+		}
+	}
+
+	// grab the centers from these partitions
+	values = calloc( t_dim, sizeof( *values ) );
+	for ( ii = 0 ; ii < tdset_max->pcount ; ii++ ) {
+		TPART *part = tdset_max->partitions + ii;
+		values[ii] = part->center;
+	}
+	t_centers = calloc( 1, sizeof( *t_centers ) );
+	t_centers->values = values;
+	t_centers->count = t_dim;
+
+	return t_centers;
+}
+
+
 // find the index in the DST corresponding to frequency ff and time tt.
-static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt) {
-	int ii, ind;
+static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt, BOOL all_freqs) {
+	int ii, imax, ind;
 	int N = pars->N;
 	int f_target = FREQ_2_INDEX(ff, N);
 	int t_target = tt;
 
-	// loop over the non-negative (index 0) and the negative (index 1) frequency partition sets
+	// loop over the non-negative (index 0) and (optionally) the negative (index 1) frequency partition sets
 	// Note: This function requires that the frequency partition sets are in normal frequency
 	// order, i,e, positive sets: (0, 1, ... , max_f, [Nyquist]) negative sets: (-max_f, ... -1)
-	for ( ind = 0, ii = 0 ; ii < 2 ; ii++ ) {
+	imax = all_freqs ? 2 : 1;
+	for ( ind = 0, ii = 0 ; ii < imax ; ii++ ) {
 		int jj;
 		FPSET *fpset = pars->fpset + ii;
 		// loop over the frequency partitions in this set
@@ -743,180 +836,45 @@ static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt) {
 }
 
 
-// Make a 2D time-frequency image with linear spacing in time and frequency
-// using a nearest neighbor sampling of the fast S transform.
-// If the original signal was N points long, the image will be NxN. Optionally, if 0 < M <=N
-// is specified, then the image will be down-sampled to MxM (can set M<=0 to use N)
-// If make_ind_map is TRUE, than the image will consist of the corresponding indicies of the transform
-DllExport DIMAGE *ngft_1d_interpolateNN( DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M, BOOL make_ind_map ) {
-	int ii, img_len, N;
+// free space for an allocated DIMAGE pointer
+DllExport void freeDImage( DIMAGE *image ) {
+	if ( image != NULL ) {
+		if ( image->img != NULL ) {
+			if ( image->img->values != NULL && image->img->count > 0 )
+				free( image->img->values );
+			free( image->img );
+		}
+		if ( image->x_centers != NULL )
+			freeIlist( image->x_centers );
+		if ( image->y_centers != NULL )
+			freeIlist( image->y_centers );
+		free( image );
+	}
+}
+
+
+// Make a 2D time-frequency image using nearest-neighbor sampling of the fast S transform.
+// Sampling is based either on: (1) the centers of the time and frequency partitions, by setting
+// by_part = TRUE, or, (2) the complete (redundant) set of times and frequencies implied by the
+// original signal sampling and FT (by_part = FALSE). If the original signal was N points long,
+// then using by_part = TRUE results in an image dimension of roughly log2N x log2N; otherwise the
+// image will be NxN. Negative frequencies will be included if all_freqs is TRUE. A down-sampled
+// image can be obtained by specifying M < N (log2N, if by_part = TRUE), resulting in an image of
+// approximately MxM. If M <= 0, then down-sampling will not be used. If make_ind_map = TRUE, then
+// the image will consist of the Fast S-Transform nearest-neighbor indicies at the specified sampling.
+// The returned image is stored by row, with time on the horizontal axis, and frequency on the vertical.
+// ILISTs of the center times and frequencies are also provided, in units of the original NxN time-freq space
+DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M,
+												BOOL by_part, BOOL all_freqs, BOOL make_ind_map) {
+	int ii, f_dim, nf_dim, t_dim, nt_dim, img_len, N;
+	ILIST *f_centers = NULL, *t_centers = NULL;
 	DCMPLX *image_arr;
 	DIMAGE *image;
-	double factor;
+	double t_factor, f_factor;
 	BOOL down_sample, free_tpcol = FALSE;
 
-	if ( signal == NULL || pars == NULL )
-		oops( "ngft_1d_interpolateNN", "Invalid argument: Signal and/or pars is NULL" );
-
-	if ( tpcol == NULL ) {
-		tpcol = ngft_TimePartitions( pars );
-		free_tpcol = TRUE;
-	}
-
-	N = pars->N;
-	if ( M <= 0 )
-		M = N;
-	M = MIN( M, N );	// don't allow augmentation
-	down_sample = (M < N);
-	factor = (double)M / N;
-
-	img_len = M * M;
-	image_arr = calloc( img_len, sizeof( *image_arr ) );
-
-	// get image
-	for ( ii = 0 ; ii < M ; ii++ ) {
-		int fs = down_sample ? ROUND( ii / factor ) : ii;
-		int ff = INDEX_2_FREQ( fs, N );
-		int jj;
-		for ( jj = 0 ; jj < M ; jj++ ) {
-			int img_ind;
-			int tt = down_sample ? ROUND( jj / factor ) : jj;
-			int kk = find_index( pars, tpcol, ff, tt );
-			if ( kk < 0 || kk >= N )
-				oops( "ngft_1d_interpolateNN", "Application exception: can't find image index" );
-			img_ind = ii * M + jj;
-			if ( make_ind_map ) {
-				image_arr[img_ind].r = kk;	// image value is just the DST index
-				image_arr[img_ind].i = 0;
-			} else {
-				memcpy( image_arr + img_ind, signal + kk, sizeof( *image ) );
-			}
-		}
-	}
-
-	if ( free_tpcol )
-		ngft_FreeTimePartitions( tpcol );
-
-	image = calloc( 1, sizeof( *image ) );
-	image->img = calloc( 1, sizeof( *(image->img) ) );
-	image->img->values = image_arr;
-	image->img->count = img_len;
-	image->ht = M;
-	image->wd = M;
-
-	return image;
-}
-
-// get the count of frequency partitions
-static int getFreqDim( FPCOL *pars ) {
-	int ii, f_dim;
-	// loop over the non-negative (index 0) and the negative (index 1) frequency partition sets
-	for ( f_dim = 0, ii = 0 ; ii < 2 ; ii++ ) {
-		FPSET *fpset = pars->fpset + ii;
-		f_dim += fpset->pcount;
-	}
-	return f_dim;
-}
-
-
-// get the center-values of the frequency partitions, in order of the partitions
-DllExport ILIST *getFreqCenters(FPCOL *pars) {
-	int ii, f_count, f_dim, N;
-	ILIST *f_centers;
-	int *values;
-
-	N = pars->N;
-	f_dim = getFreqDim(pars);
-	values = calloc(f_dim, sizeof(*values));
-
-	// loop over the non-negative (index 0) and the negative (index 1) frequency partition sets
-	for ( f_count = 0, ii = 0 ; ii < 2 ; ii++ ) {
-		int jj;
-		FPSET *fpset = pars->fpset + ii;
-		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
-			FPART *part = fpset->partitions + jj;
-			values[f_count++] = INDEX_2_FREQ(part->center, N); // need actual frequency, not array index
-		}
-	}
-
-	f_centers = calloc( 1, sizeof( *f_centers ) );
-	f_centers->values = values;
-	f_centers->count = f_count;
-
-	return f_centers;
-}
-
-
-DllExport void freeIlist( ILIST *ilist ) {
-	if ( ilist != NULL ) {
-		if ( ilist->values != NULL && ilist->count > 0 )
-			free( ilist->values );
-		free( ilist );
-	}
-}
-
-
-// get the maximum partition count over the sets of partitions with common decimation factors
-static int getTimeDim(TPCOL *tpcol) {
-	int ii, t_dim;
-	for ( t_dim = 0, ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
-		TDSET *tdset = tpcol->tdsets + ii;
-		if ( tdset->pcount > t_dim )
-			t_dim = tdset->pcount;
-	}
-	return t_dim;
-}
-
-
-// get the center-values of the time-partition with the most partitions, in order of the partitions
-DllExport ILIST *getTimeCenters( TPCOL *tpcol ) {
-	int ii, t_dim;
-	TDSET *tdset_max;
-	ILIST *t_centers;
-	int *values;
-
-	// find the partition set with max number of partitions
-	for ( t_dim = 0, tdset_max = NULL, ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
-		TDSET *tdset = tpcol->tdsets + ii;
-		if ( tdset->pcount > t_dim ) {
-			t_dim = tdset->pcount;
-			tdset_max = tdset;
-		}
-	}
-
-	// grab the centers from these partitions
-	values = calloc( t_dim, sizeof( *values ) );
-	for ( ii = 0 ; ii < tdset_max->pcount ; ii++ ) {
-		TPART *part = tdset_max->partitions + ii;
-		values[ii] = part->center;
-	}
-	t_centers = calloc( 1, sizeof( *t_centers ) );
-	t_centers->values = values;
-	t_centers->count = t_dim;
-
-	return t_centers;
-}
-
-
-// Make a 2D time-frequency image using linear spacing in time and log spacing
-// in frequency using a nearest neighbor sampling of the fast S transform. The
-// frequencies will be the centers of the frequency partitions, and the times will
-// be the centers of the time partition with the greatest number of partitions. If
-// the original signal was N points long, the image will be roughly log2N x log2N.
-// Optionally, if 0 < M <= log2N is specified, then the image will be down-sampled
-// to M in time (can set M<=0 to use default) If make_ind_map is TRUE, than the image
-// will consist of the corresponding indicies of the transform
-DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M, BOOL make_ind_map) {
-	int ii, f_dim, nf_dim, t_dim, nt_dim, img_len, N;
-	ILIST *f_centers;
-	ILIST *t_centers;
-	DCMPLX *image_arr;
-	DIMAGE *image;
-	double factor;
-	BOOL down_sample, N_is_odd, free_tpcol = FALSE;
-
 	if ( (signal == NULL && make_ind_map == FALSE) || pars == NULL )
-		oops( "ngft_1d_logfInterpolateNN", "Invalid argument: Signal and/or pars is NULL" );
+		oops( "ngft_1d_InterpolateNN", "Invalid argument: Signal and/or pars is NULL" );
 
 	if ( tpcol == NULL ) {
 		tpcol = ngft_TimePartitions( pars );
@@ -924,38 +882,51 @@ DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *
 	}
 
 	N = pars->N;
-	N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
 
-	t_dim = getTimeDim(tpcol);
+	t_dim = by_part ? getTimeDim(tpcol) : N;
 	if ( M <= 0 )
 		M = t_dim;
 	M = MIN( M, t_dim );	// don't allow augmentation
 	down_sample = (M < t_dim);
-	factor = (double)M / t_dim;
+	t_factor = (double)M / t_dim;
 	nt_dim = M;
 
-	f_dim = getFreqDim(pars);
-	nf_dim = ROUND(factor * f_dim);
+	f_dim = by_part ? getFreqDim(pars, all_freqs) : all_freqs ? N : N / 2;
+	f_factor = down_sample ? MIN( (all_freqs ? 1 : 2) * t_factor, 1 ) : 1;
+	nf_dim = ROUND(f_factor * f_dim);
 
 	img_len = nf_dim * nt_dim;
 	image_arr = calloc(img_len, sizeof(*image_arr));
 
-	f_centers = getFreqCenters( pars );
-	t_centers = getTimeCenters( tpcol );
+	if ( by_part ) {
+		f_centers = freqPartitionCenters( pars, all_freqs );
+		t_centers = timePartitionCenters( tpcol );
+	} else {
+		f_centers = calloc( 1, sizeof( *f_centers ) );
+		f_centers->values = calloc( f_dim, sizeof( *(f_centers->values) ) );
+		f_centers->count = f_dim;
+		t_centers = calloc( 1, sizeof( *t_centers ) );
+		t_centers->values = calloc( t_dim, sizeof( *(t_centers->values) ) );
+		t_centers->count = t_dim;
+	}
 
 	// get image
 	for ( ii = 0 ; ii < nf_dim ; ii++ ) {
 		int jj;
-		int is = down_sample ? ROUND(ii / factor) : ii;
-		int ff = f_centers->values[is];
+		int is = down_sample ? ROUND(ii / f_factor) : ii;
+		int ff = by_part ? f_centers->values[is] : INDEX_2_FREQ( is, N );
+		if ( ! by_part )
+			f_centers->values[ii] = ff;
 		for ( jj = 0 ; jj < nt_dim ; jj++ ) {
 			int img_ind;
-			int js = down_sample ? ROUND(jj / factor) : jj;
-			int tt = t_centers->values[js];
-			int kk = find_index(pars, tpcol, ff, tt);
+			int js = down_sample ? ROUND(jj / t_factor) : jj;
+			int tt = by_part ? t_centers->values[js] : js;
+			if ( ! by_part )
+				t_centers->values[jj] = tt;
+			int kk = find_index(pars, tpcol, ff, tt, all_freqs);
 			if ( kk < 0 || kk >= N )
-				oops( "ngft_1d_logfInterpolateNN", "Application exception: can't find image index" );
-			img_ind = ii * nt_dim + jj;
+				oops( "ngft_1d_interpolateNN", "Application exception: can't find image index" );	
+			img_ind = ii * nt_dim + jj; // image stored by row, with time on the horizontal axis, and frequency on the vertical
 			if ( make_ind_map ) {
 				image_arr[img_ind].r = kk;	// image value is just the DST index
 				image_arr[img_ind].i = 0;
@@ -972,23 +943,9 @@ DllExport DIMAGE *ngft_1d_logfInterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *
 	image->img = calloc(1, sizeof(*(image->img)));
 	image->img->values = image_arr;
 	image->img->count = img_len;
-	image->ht = f_dim;
-	image->wd = t_dim;
+	image->x_centers = t_centers;
+	image->y_centers = f_centers;
 
 	return image;
 }
-
-
-// free space for an allocated DIMAGE pointer
-DllExport void freeDImage( DIMAGE *image ) {
-	if ( image != NULL ) {
-		if ( image->img != NULL ) {
-			if ( image->img->values != NULL && image->img->count > 0 )
-				free( image->img->values );
-			free( image->img );
-		}
-		free( image );
-	}
-}
-
 

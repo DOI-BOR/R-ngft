@@ -1,7 +1,7 @@
-Package: rngft
+Package: ngft
 Type: Package
 Title: Stockwell or S-Transform (General Fourier-family Transform)
-Version: 0.1.3
+Version: 0.1.4
 Date: 2017-02-01
 Author: Chris Wood
 Maintainer: Chris Wood <cwood@usbr.gov>
@@ -14,5 +14,6 @@ License: GPL (>=3)
 Encoding: UTF-8
 LazyData: true
 NeedsCompilation: yes
+KeepSource: true
 SystemRequirements: fftw3 (>= 3.1.2)
 RoxygenNote: 5.0.1

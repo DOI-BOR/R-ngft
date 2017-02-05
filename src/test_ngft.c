@@ -57,15 +57,12 @@ int main( int argc, char **argv ) {
 	DCMPLX *cts;
 	DIMAGE *image;
 	FILE *infile = stdin, *outfile = stdout;
-	BOOL do_inverse = FALSE;
-	BOOL do_image = FALSE;
-	BOOL gaussian_window = TRUE;
+	BOOL do_inverse = FALSE, do_image = FALSE, gaussian_window = TRUE;
+	BOOL by_part = TRUE, all_freqs = FALSE, ind_map = FALSE;
 	int stride = 1, image_dim = -1;
 	windowFunction *window_fn = NULL;
 	FPCOL *partitions;
 	TPCOL *tpcol;
-	ILIST *f_centers;
-	ILIST *t_centers;
 
 	progname = (cp = strrchr(*argv,PATH_SEP)) != (char *)NULL ? cp+1 : *argv;
 	while ( --argc ) {
@@ -73,7 +70,7 @@ int main( int argc, char **argv ) {
 			switch ( *(*argv + 1) ) {
 				case 'h':
 				case 'H':
-					fprintf( stdout, "USAGE: %s [-h|-H] [-i] [-I] [-o outfile] [infile]\n", progname );
+					fprintf( stdout, "USAGE: %s [-h|-H] [-i] [-I] [-a] [-A] [-m] [-o outfile] [infile]\n", progname );
 					break;
 				case 'i': // do inverse
 					do_inverse = TRUE;
@@ -81,6 +78,21 @@ int main( int argc, char **argv ) {
 					break;
 				case 'I':	// output image
 					if ( ! do_inverse )
+						do_image = TRUE;
+					break;
+				case 'a': // output image for all times and freqs, instead of by partition
+					by_part = FALSE;
+					if ( !do_inverse )
+						do_image = TRUE;
+					break;
+				case 'A': // output image results for all frequencies
+					all_freqs = TRUE;
+					if ( !do_inverse )
+						do_image = TRUE;
+					break;
+				case 'm':	// output image as index map
+					ind_map = TRUE;
+					if ( !do_inverse )
 						do_image = TRUE;
 					break;
 				case 'o':
@@ -129,48 +141,45 @@ int main( int argc, char **argv ) {
 	partitions = ngft_DyadicPartitions(dcount);
 	ngft_AddWindowsToParts(partitions, window_fn);
 	
-	print_freq_partitions(partitions, stderr);
-
 	// Call 1D GFT Function
 	if ( do_inverse ) {
 		ngft_1dComplex64Inv( cts, partitions, stride );
-		fprintf( outfile, "# inv-FST\n" );
+		fprintf( outfile, "# INV: Re(z)   Im(z)        |z|\n" );
 	} else {
 		ngft_1dComplex64( cts, dcount, partitions, stride );
-		fprintf( outfile, "# FST\n" );
+		fprintf( outfile, "# FST: Re(z)   Im(z)        |z|\n" );
 	}
 	for ( ii = 0 ; ii < dcount ; ii++ )
 		fprintf( outfile, "%10.3e %10.3e\t %9.3e\n", cts[ii].r, cts[ii].i, modulus(cts+ii) );
 
 	if ( do_image ) {
-		BOOL do_log = TRUE, make_ind_map = FALSE;
-		// get complex image
+		// get time partitions
 		tpcol = ngft_TimePartitions( partitions );
 
-		print_time_partitions(tpcol, stderr);
+		// get complex image
+		image = ngft_1d_InterpolateNN(cts, partitions, tpcol, image_dim, by_part, all_freqs, ind_map);
 
-		image_dim = -1;
-		if ( do_log )
-			image = ngft_1d_logfInterpolateNN(cts, partitions, tpcol, image_dim, make_ind_map);
-		else
-			image = ngft_1d_interpolateNN(cts, partitions, tpcol, image_dim, make_ind_map);
-
-		// get time and frequency centers
-		f_centers = getFreqCenters( partitions );
-		t_centers = getTimeCenters( tpcol );
-
-		fprintf( outfile, "\n%s:\n", make_ind_map ? "Index map" : "Image" );
-		for ( ii = 0 ; ii < image->ht ; ii++ ) {
+		// print the image or index map
+		fprintf( outfile, "\n%s%s:\n", ind_map ? "Index map" : "Image",  all_freqs ? " (all frequencies)" : " (non-negative frequencies)");
+		fprintf( outfile, "  f\\t" );
+		for ( ii = 0 ; ii < image->x_centers->count ; ii++ )
+			fprintf( outfile, " %8d", image->x_centers->values[ii]);
+		fprintf( outfile, "\n---- " );
+		for ( ii = 0 ; ii < image->x_centers->count ; ii++ )
+			fprintf( outfile, " --------");
+		fprintf( outfile, "\n" );
+		for ( ii = 0 ; ii < image->y_centers->count ; ii++ ) {
 			int jj;
-			fprintf( outfile, "%3d: ", do_log ? f_centers->values[ii] : image_dim > 0 ? ROUND(ii * dcount / (double)image_dim) : ii);
-			for ( jj = 0 ; jj < image->wd ; jj++ )
-				fprintf( outfile, " %8.1e", modulus( image->img->values + ii*image->wd + jj ) );
+			char *fmt = ind_map ? " %8.0f" : " %8.1e";
+			fprintf( outfile, "%3d: ", image->y_centers->values[ii]);
+			for ( jj = 0 ; jj < image->x_centers->count ; jj++ )
+				fprintf( outfile, fmt, modulus( image->img->values + ii * image->x_centers->count + jj ) );
 			fprintf( outfile, "\n" );
 		}
-		fprintf( outfile, "     " );
-		for ( ii = 0 ; ii < image->wd ; ii++ )
-			fprintf( outfile, " %8d", do_log ? t_centers->values[ii] : image_dim > 0 ? ROUND(ii * dcount / (double)image_dim) : ii);
-		fprintf( outfile, "\n" );
+
+		// print the frequency and time partitions
+		print_freq_partitions(partitions, outfile);
+		print_time_partitions(tpcol, outfile);
 	}
 
 	free(cts);
@@ -178,8 +187,6 @@ int main( int argc, char **argv ) {
 	if ( do_image ) {
 		freeDImage( image );
 		ngft_FreeTimePartitions( tpcol );
-		freeIlist( f_centers );
-		freeIlist( t_centers );
 	}
 
 	return 0;
