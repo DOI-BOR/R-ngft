@@ -7,6 +7,7 @@
 #delta <- c(rep(0,15),1,rep(0,16))
 #delta <- c(rep(0,23),1,rep(0,24))
 delta <- c(rep(0,400),1,-1,rep(0,1600))
+delta <- c(rep(0,107),rep(1,40),rep(0,108))
 
 # choose time increment
 dt <- 0.01
@@ -14,7 +15,7 @@ N <- length(delta)
 df = 1 / (N * dt)
 
 # transform the delta function
-fst.delta <- ngft::fst(delta, dt)
+fst.delta <- ngft::fst(delta, dt, by.part=FALSE)
 if ( N < 50 )
   abs(fst.delta$image)
 
@@ -22,9 +23,10 @@ if ( N < 50 )
 # so also take transpose
 img.plt <- t(abs(fst.delta$image))
 
-xvals <- seq(from=1,to=fst.delta$wd,by=1)
-yvals <- seq(from=0,to=fst.delta$ht,by=1)
+xvals <- seq(from=0,to=fst.delta$wd - 1,by=1)
+yvals <- seq(from=0,to=fst.delta$ht - 1,by=1)
 nlev <- 2 * fst.delta$ht
+nlev <- 80
 breaks <- quantile(img.plt, probs=seq(0,1,1/nlev))
 image(x=xvals, y=yvals, z=img.plt,
       col=rainbow(length(breaks)-1), breaks=breaks,
@@ -32,6 +34,7 @@ image(x=xvals, y=yvals, z=img.plt,
 
 xvals <- dt * fst.delta$t.centers
 yvals <- df * fst.delta$f.centers
-#image2D(img.plt, x=xvals, y=yvals, xlab="time, sec.", ylab="frequency, Hz.")
+img.plt <- t(log(abs(fst.delta$image)))
+image2D(img.plt, x=xvals, y=yvals, xlab="time, sec.", ylab="frequency, Hz.")
 
 

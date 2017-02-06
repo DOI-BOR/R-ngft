@@ -127,15 +127,21 @@ static void shift(DCMPLX *sig, int N, int amount) {
 }
 
 
-// Create a Gaussian in the frequency domain by taking the DFT of
-// a Gaussin in the time domain with sigma = 1/freq.
+// Create a Gaussian, with sigma-f = freq, in the frequency domain by taking
+// the DFT of a Gaussian in the time domain with sigma-t = 1/(2*pi*freq).
+// For this case, g(f) = FT[exp(-4 * pi^2 * t^2 * freq^2 / 2)]. See, e.g., Brigham (1974).
+// For the discrete case, t -> i * dt, freq -> j / (N * dt), so we have
+// Gaussian(f) = DFT(exp(-4 * pi^2 * (i/N)^2 * j^2 / 2)] = DFT[exp(x^2 * j^2 / 2)]
+// where x = [i * 2 * x_max / (N - 1) - x_max] is in the range [-x_max, +x_max], and x_max = pi.
 DllExport DCMPLX *gaussian(int N, int freq) {
 	int ii;
-	// Original GFT code used x_max = 0.5, but exp(-x) underflows for x > 708 on IEEE hardware. Thus we
-	//		need x_max * freq < sqrt(2 * 708) = 38, to avoid underflow. The largest center frequency
-	//		in a dyadic scaling is about freq_max = 3 * N / 8, so x_max must be scaled such that
-	//		x_max * freq_max < sqrt(2 * 708), or x_max < 100 / N. Select x_max <= 10 / N.
-	double x, x_max = MIN( 0.5, 10. / N );
+	// Avoid exp(-x) underflow for x > 708 on IEEE hardware? On underflow, exp() returns 0,
+	//		and raises an FE_UNDERFLOW exception. Need x_max * freq_max < sqrt(2 * 708) = 38,
+	//		to avoid underflow. The largest frequency is N/2. For dyadic scaling, freq_max ~ 3 * N / 8),
+	//		which gives x_max < 100 / N. For freq_max = N/2, then x_max < 75 / N. Original GFT code used
+	//		x_max = 0.5. When x_max < pi, frequency resolution is reduced by an amount gamma = x_max / pi.
+	//		Best choice seems to be to allow underflow (terms are 0), or else resolution is decreased.
+	double x, x_max = M_PI;  // MIN( M_PI, 100. / N );
 	double dx = 2 * x_max / (N - 1);
 	DCMPLX *win = calloc(N, sizeof( *win ));
 	double win_sum;
@@ -145,28 +151,28 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 
 	// TODO: seems more obvious to construct windows directly in the frequency domain, which
 	// is easy to do analytically since the FT of a Gaussian is also a Gaussian. Would
-	// need to include phase shift (for even N) corresponding to time shift of 1/2 at t=0.
+	// need to include phase shift (for even N) corresponding to time shift of 1/2 delta-t at t=0.
 	// Other difference between FT and DFT will be sinc(x) convolution due to windowing over N.
 
 	// get Gaussian in time domain from -x_max to +x_max, centered at N/2
+	double scale = ABS( freq ) / sqrt( 2 * M_PI );
 	for ( win_sum = 0 , ii = 0 ; ii < N ; ii++ ) {
 		double g;
 		x = (ii * dx - x_max) * freq;
-		g = exp(-0.5 * x * x) * ABS(freq) / sqrt(2*M_PI);
+		g = scale * exp(-0.5 * x * x);
 		win[ii].r = g;
 		win[ii].i = 0;
 		win_sum += win[ii].r;
 	}
 
-	// Normalize window. Note: it's optional to normalize the time-domain Gaussian
-	// because the frequency-domain Gaussian will be normalized after partitioning.
+	// Normalize window.
 	for ( ii = 0; ii < N ; ii++ )
 		win[ii].r /= win_sum;
 
 #ifdef NGFT_VERBOSE_DEBUG
-	fprintf( stderr, "Gaussian Window: N=%2d freq=%2d, x_max=%.3f\n", N, freq, x_max );
+	fprintf( stderr, "Gaussian Window: N=%2d freq=%2d, gamma=%.3f, x_max=%.3f, win_sum=%.3f\n", N, freq, x_max/M_PI, x_max, win_sum );
 	for ( ii = 0 ; ii < N ; ii++ )
-		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
+		fprintf( stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
 	fflush( stderr );
 #endif
 
@@ -178,7 +184,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 #ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "Shifted %d:\n", N/2 );
 	for ( ii = 0 ; ii < N ; ii++ )
-		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
+		fprintf( stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
 	fflush( stderr );
 #endif
 
@@ -189,7 +195,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 #ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "FFT: freq=%2d\n", freq );
 	for ( ii = 0 ; ii < N ; ii++ )
-		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
+		fprintf( stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
 	fflush( stderr );
 #endif
 
@@ -217,7 +223,7 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 #ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "Final FFT after shift and setting to real: freq=%2d\n", freq );
 	for ( ii = 0 ; ii < N ; ii++ )
-		fprintf( stderr, "\t%2d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
+		fprintf( stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
 	fflush( stderr );
 #endif
 
@@ -547,7 +553,6 @@ DllExport void ngft_AddWindowsToParts(FPCOL *pars, windowFunction *window_fn) {
 			// create a window of length N in the frequency domain, centered on fcenter
 			if ( win_len > 1 ) {
 				int kk;
-				double sum, norm;
 				DCMPLX *full_win = window_fn( N, fcenter );
 
 				// Subset out the part of the full window overlapping this partition. The partition
@@ -557,13 +562,6 @@ DllExport void ngft_AddWindowsToParts(FPCOL *pars, windowFunction *window_fn) {
 				win = calloc( win_len, sizeof( *win ) );
 				memcpy( win, full_win + partition->start, win_len * sizeof( *win ) );
 				free( full_win );
-
-				// re-normalize window within the partition
-				for ( sum = 0, kk = 0; kk < win_len ; kk++ )
-					sum += modulus(win + kk);
-				norm = 1 / sum;
-				for ( kk = 0; kk < win_len ; kk++ )
-					cmulByReal(win+kk, norm);
 			} else {
 				if ( win_len < 1 )
 					oops( "ngft_AddWindowsToParts", "Application Error: win_len < 1" );	// win_len must be >= 1
@@ -925,7 +923,7 @@ DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpco
 				t_centers->values[jj] = tt;
 			int kk = find_index(pars, tpcol, ff, tt, all_freqs);
 			if ( kk < 0 || kk >= N )
-				oops( "ngft_1d_interpolateNN", "Application exception: can't find image index" );	
+				oops( "ngft_1d_interpolateNN", "Application exception: can't find image index" );
 			img_ind = ii * nt_dim + jj; // image stored by row, with time on the horizontal axis, and frequency on the vertical
 			if ( make_ind_map ) {
 				image_arr[img_ind].r = kk;	// image value is just the DST index
