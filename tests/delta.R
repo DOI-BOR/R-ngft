@@ -1,6 +1,6 @@
 # test rgft with a delta function
 
-require(grDevices)
+# require(grDevices)
 
 # make a delta function, centered in a window
 #delta <- c(rep(0,13),1,rep(0,14))
@@ -14,7 +14,7 @@ N <- length(delta)
 df = 1 / (N * dt)
 
 # transform the delta function
-fst.delta <- fst(delta, dt)
+fst.delta <- ngft::fst(delta, dt)
 if ( N < 50 )
   abs(fst.delta$image)
 
@@ -32,7 +32,6 @@ image(x=xvals, y=yvals, z=img.plt,
 
 xvals <- dt * fst.delta$t.centers
 yvals <- df * fst.delta$f.centers
-image2D(img.plt, x=xvals, y=yvals,
-        xlab="time, sec.", ylab="frequency, Hz.")
+#image2D(img.plt, x=xvals, y=yvals, xlab="time, sec.", ylab="frequency, Hz.")
 
 

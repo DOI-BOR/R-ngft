@@ -4,15 +4,17 @@ ifeq "$(WIN)" "64"
 else
   FFTW_DIR_ARCH=fftw-3.3.5-dll32
 endif
-LIB_FFTW_DIR=../../../Downloads/$(FFTW_DIR_ARCH)
+#LIB_FFTW_DIR=../../../Downloads/$(FFTW_DIR_ARCH)
+LIB_FFTW_DIR="C:/Users/CWood/Documents/Code Monkey/Src/Downloads/$(FFTW_DIR_ARCH)"
 
 LIB_FFTW=fftw3-3
 LIB_FFTW_DLL=$(LIB_FFTW_DIR)/lib$(LIB_FFTW).dll
 
 PKG_CPPFLAGS=-DUSING_R -I$(LIB_FFTW_DIR)
 PKG_LIBS=-L$(LIB_FFTW_DIR) -l$(LIB_FFTW)
+#PKG_LIBS=-l$(LIB_FFTW)
 
-all: $(SHLIB) fftw
+all: fftw $(SHLIB)
 
 fftw:
 	@cp $(LIB_FFTW_DLL) .

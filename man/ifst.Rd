@@ -7,11 +7,11 @@
 ifst(dst, dt = 0.01, gauss = NA)
 }
 \arguments{
+\item{dst}{Fast S-transform. Must convert to complex vector.}
+
 \item{dt}{Sample interval, in seconds. Default is 0.01.}
 
 \item{gauss}{TRUE for Gaussian windows, FALSE for Box windows. Default is TRUE.}
-
-\item{fst}{Fast S-transform. Must convert to complex vector.}
 }
 \value{
 A list including the complex time series of the data, and
@@ -27,7 +27,7 @@ If Box windows are selected, the results are discrete orthonormal S-transforms,
 with critical sampling in both frequency and time/space dimensions.
 
 This function is a wrapper for the New Generalized Fourier Family Transform (NGFT)
-library, a complete reimplementation of the Brown et al (2009) GFT library.
+library, a reimplementation of the Brown et al (2009) GFT library.
 }
 \seealso{
 \itemize{

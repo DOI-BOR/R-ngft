@@ -3,7 +3,7 @@
 #' \code{ifst} is used to compute the fast inverse S-transform of a complex,
 #' univariate S-transform.
 #'
-#' @param fst Fast S-transform. Must convert to complex vector.
+#' @param dst Fast S-transform. Must convert to complex vector.
 #' @param dt Sample interval, in seconds. Default is 0.01.
 #' @param gauss TRUE for Gaussian windows, FALSE for Box windows. Default is TRUE.
 #' @return A list including the complex time series of the data, and

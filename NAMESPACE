@@ -2,7 +2,8 @@
 
 # load both dll's, but make sure useDynLib for ngft comes before libfftw3-3
 # Note useDynLib uses library.dynam
-useDynLib(ngft, .registration = TRUE)
+#useDynLib(ngft, .registration = TRUE)
+useDynLib(ngft)
 # load libfftw in .onLoad instead of via useDynLib
 #useDynLib("libfftw3-3")
 

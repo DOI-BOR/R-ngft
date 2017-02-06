@@ -4,7 +4,8 @@
 \alias{fst}
 \title{Fast S-Transform}
 \usage{
-fst(xt, dt = 0.01, gauss = NA, img_dim = NA)
+fst(xt, dt = 0.01, gauss = TRUE, img.dim = NA, by.part = TRUE,
+  all.freqs = FALSE, ind.map = FALSE)
 }
 \arguments{
 \item{xt}{Equally-sampled input time series. Must convert to numeric vector.}
@@ -13,13 +14,22 @@ fst(xt, dt = 0.01, gauss = NA, img_dim = NA)
 
 \item{gauss}{TRUE for Gaussian windows, FALSE for Box windows. Default is TRUE.}
 
-\item{img_dim}{Image dimension of transform, in pixels. Default is usually best.}
+\item{img.dim}{Image dimension of transform, in pixels. Default is no downsampling.}
+
+\item{by.part}{Image is by time and frequency partition rather than by the implicit
+N time and frequency values. Default is TRUE}
+
+\item{all.freqs}{Image contains negative as well as non-negative frequencies.
+Default is FALSE.}
+
+\item{ind.map}{Image contains the index of the S-Transform value, rather than
+the value. Useful for understanding partitions. Default is FALSE.}
 }
 \value{
 A list including the complex S-transform of the data, an image sampled on
 the time and freq partition centers (usually small in dimension), the height and width
-of the image, the frequency-partition centers, the time-partition centers, and
-a the window type used.
+of the image, the frequency-partition centers, the time-partition centers,
+the window type used, and other info.
 }
 \description{
 \code{fst} is used to compute the fast S-transform of a real,
@@ -31,7 +41,7 @@ If Box windows are selected, the results are discrete orthonormal S-transforms,
 with critical sampling in both frequency and time/space dimensions.
 
 This function is a wrapper for the New Generalized Fourier Family Transform (NGFT)
-library, a complete reimplementation of the Brown et al (2009) GFT library.
+library, a reimplementation of the Brown et al (2009) GFT library.
 }
 \seealso{
 \itemize{
