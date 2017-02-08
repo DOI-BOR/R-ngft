@@ -24,7 +24,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_l, SEXP ima
 	int stride;
 	windowFunction *window_fn;
 	FPCOL *partitions;
-	TPCOL *tpcol;
+	double epsilon = -1;
 
 	double *ts = REAL(ts_d);
 	int n_samples = length(ts_d);
@@ -41,9 +41,8 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_l, SEXP ima
 		error("dt must be positive");
 
 	/* create partitions */
-	partitions = ngft_DyadicPartitions(n_samples);
+	partitions = ngft_FrequencyPartitions( n_samples, epsilon );
 	window_fn = gaussian_window ? gaussian : box;
-	ngft_AddWindowsToParts(partitions, window_fn);
 
 	// copy the data
 	stride = 1;
@@ -53,11 +52,10 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_l, SEXP ima
 		cts[ii].r = ts[ii];
 
 	// Call 1D GFT Function
-	ngft_1dComplex64(cts, n_samples, partitions, stride);
+	ngft_1dComplex64(&cts, &n_samples, &partitions, window_fn, stride);
 
 	// get complex image
-	tpcol = ngft_TimePartitions( partitions );
-	image = ngft_1d_InterpolateNN(cts, partitions, tpcol, image_dim, by_part, all_freqs, ind_map);
+	image = ngft_1d_InterpolateNN(cts, partitions, image_dim, by_part, all_freqs, ind_map);
 	nf = image->y_centers->count;
 	nt = image->x_centers->count;
 
@@ -123,7 +121,6 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP gauss_l, SEXP ima
 	free(cts);
 	freeDImage(image);
 	ngft_FreeFreqPartitions(partitions);
-	ngft_FreeTimePartitions(tpcol);
 
 	return ret_l;
 }
@@ -140,6 +137,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP dst_c, SEXP dt_d, SEXP gauss_i)
 	int stride;
 	windowFunction *window_fn;
 	FPCOL *partitions;
+	double epsilon = -1;
 
 	Rcomplex *dst = COMPLEX(dst_c);
 	int n_samples = length(dst_c);
@@ -153,8 +151,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP dst_c, SEXP dt_d, SEXP gauss_i)
 
 	/* initialize */
 	window_fn = gaussian_window ? gaussian : box;
-	partitions = ngft_DyadicPartitions(n_samples);
-	ngft_AddWindowsToParts(partitions, window_fn);
+	partitions = ngft_FrequencyPartitions( n_samples, epsilon );
 	stride = 1;
 
 	if ( (cts = calloc( n_samples, sizeof( *cts ) )) == NULL )
@@ -165,7 +162,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP dst_c, SEXP dt_d, SEXP gauss_i)
 	}
 
 	// Call 1D GFT Inverse Function
-	ngft_1dComplex64Inv(cts, partitions, stride);
+	ngft_1dComplex64Inv(&cts, &partitions, window_fn, stride);
 
 	/* allocate space for R structures for complex time series, and copy inv_gft output */
 	cts_ts = PROTECT(allocVector(CPLXSXP, n_samples)); pcnt++;
