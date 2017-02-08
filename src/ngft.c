@@ -673,7 +673,7 @@ DllExport void ngft_2dComplex64(DCMPLX *image, int N, int M, windowFunction *win
 	}
 
 	for ( col = 0 ; col < M ; col++ )
-		ngft_1dComplex64(image + col * M, N, pars, window_fn, 1);
+		ngft_1dComplex64(image + col, M, pars, window_fn, N);
 
 	free( pars );
 }
@@ -819,23 +819,6 @@ static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt, BOOL all_freqs)
 }
 
 
-// free space for an allocated DIMAGE pointer
-DllExport void freeDImage( DIMAGE *image ) {
-	if ( image != NULL ) {
-		if ( image->img != NULL ) {
-			if ( image->img->values != NULL && image->img->count > 0 )
-				free( image->img->values );
-			free( image->img );
-		}
-		if ( image->x_centers != NULL )
-			freeIlist( image->x_centers );
-		if ( image->y_centers != NULL )
-			freeIlist( image->y_centers );
-		free( image );
-	}
-}
-
-
 // Make a 2D time-frequency image using nearest-neighbor sampling of the fast S transform.
 // Sampling is based either on: (1) the centers of the time and frequency partitions, by setting
 // by_part = TRUE, or, (2) the complete (redundant) set of times and frequencies implied by the
@@ -932,3 +915,19 @@ DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, int M,
 	return image;
 }
 
+
+// free space for an allocated DIMAGE pointer
+DllExport void freeDImage( DIMAGE *image ) {
+	if ( image != NULL ) {
+		if ( image->img != NULL ) {
+			if ( image->img->values != NULL && image->img->count > 0 )
+				free( image->img->values );
+			free( image->img );
+		}
+		if ( image->x_centers != NULL )
+			freeIlist( image->x_centers );
+		if ( image->y_centers != NULL )
+			freeIlist( image->y_centers );
+		free( image );
+	}
+}

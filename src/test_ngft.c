@@ -51,7 +51,6 @@ int main( int argc, char **argv ) {
 	char line[2048];
 	int ii, line_no, dcount;
 	DCMPLX *cts;
-	DIMAGE *image;
 	FILE *infile = stdin, *outfile = stdout;
 	BOOL do_inverse = FALSE, do_image = FALSE, gaussian_window = TRUE;
 	BOOL by_part = TRUE, all_freqs = FALSE, ind_map = FALSE;
@@ -148,7 +147,7 @@ int main( int argc, char **argv ) {
 
 	if ( do_image ) {
 		// get complex image
-		image = ngft_1d_InterpolateNN(cts, partitions, image_dim, by_part, all_freqs, ind_map);
+		DIMAGE *image = ngft_1d_InterpolateNN(cts, partitions, image_dim, by_part, all_freqs, ind_map);
 
 		// print the image or index map
 		fprintf( outfile, "\n%s%s:\n", ind_map ? "Index map" : "Image",  all_freqs ? " (all frequencies)" : " (non-negative frequencies)");
