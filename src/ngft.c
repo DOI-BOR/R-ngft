@@ -127,35 +127,27 @@ static void shift(DCMPLX *sig, int N, int amount) {
 }
 
 
-// Create a Gaussian, with sigma-f = freq, in the frequency domain by taking
-// the DFT of a Gaussian in the time domain with sigma-t = 1/(2*pi*freq).
-// For this case, g(f) = FT[exp(-4 * pi^2 * t^2 * freq^2 / 2)]. See, e.g., Brigham (1974).
-// For the discrete case, t -> i * dt, freq -> j / (N * dt), so we have
-// Gaussian(f) = DFT(exp(-4 * pi^2 * (i/N)^2 * j^2 / 2)] = DFT[exp(x^2 * j^2 / 2)]
-// where x = [i * 2 * x_max / (N - 1) - x_max] is in the range [-x_max, +x_max], and x_max = pi.
+// Return the FT of a time-domain Gaussian(t,sig-t) windowing function, with sigma-t = 1 / freq.
+// Note that the FT(Gaussian(t,sig-t)) = sqrt(2 * pi) * sigma-f * Gaussian(f,sig-f), with
+// sigma-f = (pi/2) * (1/sigma-t), so this could be computed directly. Using the DFT instead,
+// t -> i * dt, and freq -> j / (N * dt), so we have
+// DFT(w(t,sig-t)) = [sqrt(1/(2*pi)) * |freq|] * DFT(exp(-(i/N)^2 * j^2 / 2)) = [.] * DFT(exp(x^2 * j^2 / 2))
+// where x = [i * 2 * x_max / (N - 1) - x_max] is in the range [-x_max, +x_max], and x_max = 0.5.
 DllExport DCMPLX *gaussian(int N, int freq) {
 	int ii;
 	// Avoid exp(-x) underflow for x > 708 on IEEE hardware? On underflow, exp() returns 0,
 	//		and raises an FE_UNDERFLOW exception. Need x_max * freq_max < sqrt(2 * 708) = 38,
 	//		to avoid underflow. The largest frequency is N/2. For dyadic scaling, freq_max ~ 3 * N / 8),
-	//		which gives x_max < 100 / N. For freq_max = N/2, then x_max < 75 / N. Original GFT code used
-	//		x_max = 0.5. When x_max < pi, frequency resolution is reduced by an amount gamma = x_max / pi.
+	//		which gives x_max < 100 / N. For freq_max = N/2, then x_max < 75 / N. When x_max < 0.5,
+	//		frequency resolution is reduced by an amount gamma = x_max / 0.5.
 	//		Best choice seems to be to allow underflow (terms are 0), or else resolution is decreased.
-	double x, x_max = M_PI;  // MIN( M_PI, 100. / N );
+	double x, x_max = 0.5;  // MIN( 0.5, 100. / N );
 	double dx = 2 * x_max / (N - 1);
 	DCMPLX *win = calloc(N, sizeof( *win ));
 	double win_sum;
-#ifdef NGFT_VERBOSE_DEBUG
-	BOOL N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
-#endif
 
-	// TODO: seems more obvious to construct windows directly in the frequency domain, which
-	// is easy to do analytically since the FT of a Gaussian is also a Gaussian. Would
-	// need to include phase shift (for even N) corresponding to time shift of 1/2 delta-t at t=0.
-	// Other difference between FT and DFT will be sinc(x) convolution due to windowing over N.
-
-	// get Gaussian in time domain from -x_max to +x_max, centered at N/2
-	double scale = ABS( freq ) / sqrt( 2 * M_PI );
+	// get a Gaussian in time domain from -x_max to +x_max, centered at N/2
+	double scale = ABS( (double)freq / N ) / sqrt( 2 * M_PI );
 	for ( win_sum = 0 , ii = 0 ; ii < N ; ii++ ) {
 		double g;
 		x = (ii * dx - x_max) * freq;
@@ -165,12 +157,13 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 		win_sum += win[ii].r;
 	}
 
-	// Normalize window.
+	// Normalize time window so that the mean = 1, since the Gaussian may be truncated
+	// for small values of |freq|
 	for ( ii = 0; ii < N ; ii++ )
 		win[ii].r /= win_sum;
 
 #ifdef NGFT_VERBOSE_DEBUG
-	fprintf( stderr, "Gaussian Window: N=%2d freq=%2d, gamma=%.3f, x_max=%.3f, win_sum=%.3f\n", N, freq, x_max/M_PI, x_max, win_sum );
+	fprintf( stderr, "Gaussian Window: N=%2d freq=%2d, gamma=%.3f, x_max=%.3f, win_sum=%.3f\n", N, freq, x_max/0.5, x_max, win_sum );
 	for ( ii = 0 ; ii < N ; ii++ )
 		fprintf( stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
 	fflush( stderr );
@@ -200,34 +193,11 @@ DllExport DCMPLX *gaussian(int N, int freq) {
 #endif
 
 	// If N is odd, then index 0 will be exactly at time 0, and the imaginary part of
-	// the DFT output indeed seems to be about 1e-14 less than the real, as expected.
+	// the DFT output is about 1e-14 less than the real, as expected.
 	// If N is even, however, then time 0 is shifted by 1/2 of a sample period from index 0,
-	// which introduces a phase shift, so the imaginary parts won't be zero.
+	// which introduces a phase shift, so the imaginary parts aren't zero.
 
-#ifdef NGFT_TEST_FORCE_REAL
-	// For even N, should I therefore replace the real part with the modulus, and set imaginary
-	// part to 0? Window won't be exactly symmetric, but it will be real.
-	// Tests indicate that NOT doing this performs better for the fwd -> inv test. Also, going to
-	// an odd value of N didn't improve the fwd -> inv test results
-	if ( ! N_is_odd ) {
-		for ( ii = 0 ; ii < N ; ii++ ) {
-			win[ii].r = modulus( win + ii );
-			win[ii].i = 0;
-		}
-	}
-#endif
-
-	// right-shift frequency window so that 0-index is centered at freq (positive or negative)
-	shift(win, N, FREQ_2_INDEX(freq,N));
-
-#ifdef NGFT_VERBOSE_DEBUG
-	fprintf( stderr, "Final FFT after shift and setting to real: freq=%2d\n", freq );
-	for ( ii = 0 ; ii < N ; ii++ )
-		fprintf( stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
-	fflush( stderr );
-#endif
-
-	return(win);
+	return(win); // length is N
 }
 
 
@@ -240,6 +210,97 @@ DllExport DCMPLX *box(int N, int freq) {
 	}
 
 	return(win);
+}
+
+
+static void fill_tdset(int N, FPART *fpart, TDSET *tdset) {
+	int ii, tc;
+	double tc_exact, exact_width;
+	int fpwidth = fpart->width;
+	exact_width = (double)N / fpwidth;
+
+	// partitions for this time-decimation set are assumed to be null; make it so
+	tdset->partitions = NULL;
+	tdset->pcount = 0;
+
+	// time-axis decimation factor = N / frequency-partition width
+	tdset->decimation = (int)floor(exact_width);
+
+	// add time partitions for this decimation factor, rounding as necessary to fill N
+	for ( tc = 0, tc_exact = 0, ii = 0 ; ii < fpwidth ; ii++, tc_exact += exact_width ) {
+		TPART* partition;
+		tdset->partitions = realloc(tdset->partitions, ++(tdset->pcount) * sizeof(*(tdset->partitions)));
+		partition = tdset->partitions + tdset->pcount - 1;
+		partition->start = tc;
+		partition->width = ROUND( tc_exact + exact_width - tc );
+		partition->end = partition->start + partition->width - 1;
+		partition->center = left_bias ? partition->end - partition->width / 2 :
+			partition->start + partition->width / 2;
+
+		tc += partition->width;
+	}
+}
+
+
+// create the time-partition collection corresponding to a specified frequency partition collection
+static TPCOL *timePartitions(FPCOL *pars) {
+	int ii, N;
+	TPCOL *tpcol;
+
+	if ( pars == NULL )
+		oops("timePartitions", "Invalid argument: pars is NULL");
+	N = pars->N;
+
+	tpcol = calloc( 1, sizeof( *tpcol ) ); // note: everything in tpcol initialized to NULL or 0
+	tpcol->N = N;
+
+	// loop over the non-negative (index 0) and the negative (index 1)
+	// frequency partition sets. Ordering doesn't matter
+	for ( ii = 0 ; ii < 2 ; ii++ ) {
+		int jj;
+		FPSET *fpset = pars->fpset + ii;
+		// loop over the frequency partitions in this set
+		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
+			FPART *fpart = fpset->partitions + jj;
+			BOOL found = FALSE;
+			if ( tpcol->tdcount > 0 ) {
+				// search existing time-partition sets for a time-axis decimation factor
+				// corresponding to this frequency-partition width
+				int kk;
+				for ( kk = 0 ; kk < tpcol->tdcount ; kk++ ) {
+					if ( tpcol->tdsets[kk].decimation == N / fpart->width ) {
+						found = TRUE;
+						break;
+					}
+				}
+			}
+			if ( ! found ) {
+				// no time-partition sets with the correct decimation found, so create one and fill,
+				// using decimation implied by this frequency-partition
+				tpcol->tdsets = realloc(tpcol->tdsets, ++(tpcol->tdcount) * sizeof(*(tpcol->tdsets)));
+				fill_tdset(N, fpart, tpcol->tdsets + tpcol->tdcount - 1);
+			}
+		}
+	}
+	return(tpcol);
+}
+
+
+// free the space
+static void freeTimePartitions(TPCOL *tpcol) {
+	int ii;
+	if ( tpcol == NULL )
+		return;
+
+	for ( ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
+		if ( tpcol->tdsets == NULL )
+			continue;
+		TDSET *tdset = tpcol->tdsets + ii;
+		if ( tdset->pcount > 0 && tdset->partitions != NULL )
+			free( tdset->partitions );
+	}
+	free( tpcol->tdsets );
+	free( tpcol );
 }
 
 
@@ -269,8 +330,6 @@ static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N) {
 	p->center = center;
 	p->end = end;
 	p->width = width;
-	p->window = NULL;
-	p->win_len = 0;
 
 	*ppart = partitions;
 
@@ -281,14 +340,14 @@ static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N) {
 // Dyadic partitioning of a DFT frequency array of length N, where N can be odd or even,
 //	and does not need to be a power of 2. The partitioning will span the array, with
 //	no overlap in partitions.
-DllExport FPCOL *ngft_DyadicPartitions(int N) {
+static FPCOL *dyadicPartitions(int N) {
 	int fs, pcount, n_pcount;
 	FPART *partitions, *n_partitions, *tmp;
 	FPCOL *partition_set;
 	BOOL N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
 
 	if ( N <= 0 )
-		oops( "ngft_DyadicPartitions", "Invalid argument: N <= 0" );
+		oops( "dyadicPartitions", "Invalid argument: N <= 0" );
 
 	partitions = NULL, pcount = 0;	// non-negative frequency partitions
 	n_partitions = NULL, n_pcount = 0; // negative frequency partitions
@@ -328,7 +387,7 @@ DllExport FPCOL *ngft_DyadicPartitions(int N) {
 //	samplerate is the sampling rate, in Hz. For audio, this should be above 2000 Hz, and
 //		if it is, then the lower-frequency reference will be about 2 octaves below 440 Hz.
 // This function compiles, but has not been tested by me (CWood)
-DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
+static FPCOL *musicPartitions(int N, double samplerate, int cents) {
 	int ii, ii_max, pcount, n_pcount;
 	FPART *p, *partitions, *np, *n_partitions, *tmp;
 	FPCOL *partition_set;
@@ -339,7 +398,7 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 	double logdelta, minlog2f, maxlog2f;
 
 	if ( N <= 0 )
-		oops( "ngft_1dMusicPartitions", "Invalid argument: N <= 0" );
+		oops( "musicPartitions", "Invalid argument: N <= 0" );
 
 	logdelta = logcent * cents;
 	if ( samplerate < 2000 ) {
@@ -367,8 +426,6 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 		p->end = NONNEG_F_IND(fe, N);
 		p->width = p->end - p->start + 1;
 		p->center = NONNEG_F_IND(p->start + p->width / 2, N);
-		p->window = NULL;
-		p->win_len = 0;
 		if ( fs > 0 ) {
 			// handle negative frequencies
 			n_partitions = realloc(n_partitions, ++n_pcount * sizeof(*n_partitions));
@@ -377,8 +434,6 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 			np->end = NEG_F_IND(-p->end, N);
 			np->width = np->start - np->end + 1;	// np->width <= p->width
 			np->center = NEG_F_IND(p->start + np->width / 2, N);
-			np->window = NULL;
-			np->win_len = 0;
 		}
 	}
 
@@ -400,6 +455,52 @@ DllExport FPCOL *ngft_1dMusicPartitions(int N, double samplerate, int cents) {
 }
 
 
+// create frequency partitions
+// TODO: make this the only extern function for making time or freq partitions, and add
+// arguments for type of freq partition
+DllExport FPCOL *ngft_FrequencyPartitions(int N) {
+	int ii;
+	TPCOL *tpcol;
+	FPCOL *pars;
+
+	if ( N <= 0 )
+		oops( "ngft_FrequencyPartitions", "Invalid argument: N <= 0" );
+
+	// make frequency partitions
+	pars = dyadicPartitions( N );
+
+	// make set of corresponding time partitions
+	tpcol = timePartitions( pars );
+
+	// set corresponding time partition for each frequency partition
+	for ( ii = 0 ; ii < 2 ; ii++ ) {
+		int jj;
+		FPSET *fpset = pars->fpset + ii;
+		// loop over the partitions in this set
+		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
+			int kk;
+			BOOL found;
+			FPART *partition = fpset->partitions + jj;
+			for ( found = FALSE, kk = 0 ; kk < tpcol->tdcount ; kk++ ) {
+				if ( tpcol->tdsets[kk].decimation == N / partition->width ) {
+					found = TRUE;
+					partition->tdset = tpcol->tdsets + kk;
+					break;
+				}
+			}
+			if ( ! found ) {
+				oops( "ngft_FrequencyPartitions", "Application exception: can't find corresponding time partition" );
+			}
+		}
+	}
+
+	// save one copy of unique time partitions; freq partitions point to corresponding time partition
+	pars->tpcol = tpcol;
+
+	return pars;
+}
+
+
 // free the space
 DllExport void ngft_FreeFreqPartitions(FPCOL *pars) {
 	int ii;
@@ -407,177 +508,40 @@ DllExport void ngft_FreeFreqPartitions(FPCOL *pars) {
 		return;
 
 	for ( ii = 0 ; ii < 2 ; ii++ ) {
-		int jj;
 		FPSET* fpset = pars->fpset + ii;
-		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
-			FPART* partition = fpset->partitions + jj;
-			if ( partition == NULL )
-				continue;
-			if ( partition->window != NULL && partition->win_len > 0 )
-				free( partition->window );
-		}
 		free( fpset->partitions );
 	}
+	if ( pars->tpcol != NULL )
+		freeTimePartitions( pars->tpcol );
 	free( pars );
 }
 
 
-static void fill_tdset(int N, FPART *fpart, TDSET *tdset) {
-	int ii, tc;
-	double tc_exact, exact_width;
-	int fpwidth = fpart->width;
-	exact_width = (double)N / fpwidth;
+// get shifted DFT of N-length time-domain window function. Shift is such that
+// f = 0 of the window is shifted to fcenter (which may be positive or negative)
+static DCMPLX *getShiftedWindow(int fcenter, int width, int N, windowFunction *window_fn) {
+	DCMPLX *win;
 
-	// partitions for this time-decimation set are assumed to be null; make it so
-	tdset->partitions = NULL;
-	tdset->pcount = 0;
-
-	// time-axis decimation factor = N / frequency-partition width
-	tdset->decimation = (int)floor(exact_width);
-
-	// add time partitions for this decimation factor, rounding as necessary to fill N
-	for ( tc = 0, tc_exact = 0, ii = 0 ; ii < fpwidth ; ii++, tc_exact += exact_width ) {
-		TPART* partition;
-		tdset->partitions = realloc(tdset->partitions, ++(tdset->pcount) * sizeof(*(tdset->partitions)));
-		partition = tdset->partitions + tdset->pcount - 1;
-		partition->start = tc;
-		partition->width = ROUND( tc_exact + exact_width - tc );
-		partition->end = partition->start + partition->width - 1;
-		partition->center = left_bias ? partition->end - partition->width / 2 :
-				partition->start + partition->width / 2;
-
-		tc += partition->width;
+	// get the N-length FT of the time window, centered about 0
+	if ( width < 1 ) { // error: width must be >= 1
+		oops( "getShiftedWindow", "Application Error: width < 1" );
+	} else if ( width == 1 ) { // length-1 windows are always the same
+		win = calloc( N, sizeof( *win ) );
+		win[0].r = 1;
+	} else { // width > 1
+		// get DFT of time-domain window of length N, centered on freq=0
+		win = window_fn(N, fcenter);
 	}
-}
 
+	// right-shift DFT of window so that 0-frequency is centered at freq=fcenter (positive or negative)
+	shift(win, N, FREQ_2_INDEX(fcenter,N));
 
-// create the time-partition collection corresponding to a specified frequency partition collection
-DllExport TPCOL *ngft_TimePartitions(FPCOL *pars) {
-	int ii, N;
-	TPCOL *tpcol;
-
-	if ( pars == NULL )
-		oops("ngft_TimePartitions", "Invalid argument: pars is NULL");
-	N = pars->N;
-
-	tpcol = calloc( 1, sizeof( *tpcol ) ); // note: everything in tpcol initialized to NULL or 0
-	tpcol->N = N;
-
-	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets. Ordering doesn't matter
-	for ( ii = 0 ; ii < 2 ; ii++ ) {
-		int jj;
-		FPSET *fpset = pars->fpset + ii;
-		// loop over the frequency partitions in this set
-		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
-			FPART *fpart = fpset->partitions + jj;
-			BOOL found = FALSE;
-			if ( tpcol->tdcount > 0 ) {
-				// search existing time-partition sets for a time-axis decimation factor
-				// corresponding to this frequency-partition width
-				int kk;
-				for ( kk = 0 ; kk < tpcol->tdcount ; kk++ ) {
-					if ( tpcol->tdsets[kk].decimation == N / fpart->width ) {
-						found = TRUE;
-						break;
-					}
-				}
-			}
-			if ( ! found ) {
-				// no time-partition sets with the correct decimation found, so create one and fill,
-				// using decimation implied by this frequency-partition
-				tpcol->tdsets = realloc(tpcol->tdsets, ++(tpcol->tdcount) * sizeof(*(tpcol->tdsets)));
-				fill_tdset(N, fpart, tpcol->tdsets + tpcol->tdcount - 1);
-			}
-		}
-	}
-	return(tpcol);
-}
-
-
-// free the space
-DllExport void ngft_FreeTimePartitions(TPCOL *tpcol) {
-	int ii;
-	if ( tpcol == NULL )
-		return;
-
-	for ( ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
-		if ( tpcol->tdsets == NULL )
-			continue;
-		TDSET *tdset = tpcol->tdsets + ii;
-		if ( tdset->pcount > 0 && tdset->partitions != NULL )
-			free( tdset->partitions );
-	}
-	free( tpcol->tdsets );
-	free( tpcol );
-}
-
-
-// create partitions and corresponding windows from a specified N and window function
-DllExport FPCOL *ngft_MakePartsAndWindows(int N, windowFunction *window_fn) {
-	if ( N <= 0 )
-		oops( "ngft_MakePartsAndWindows", "Invalid argument: N <= 0" );
-	if ( window_fn == NULL )
-		window_fn = gaussian;
-
-	FPCOL *partition_set = ngft_DyadicPartitions( N );
-	ngft_AddWindowsToParts(partition_set, window_fn);
-	return partition_set;
-}
-
-
-// Create windows and associate with specified partitions
-// This should be the only place in the ngft library where windows are created
-DllExport void ngft_AddWindowsToParts(FPCOL *pars, windowFunction *window_fn) {
-	int ii;
-	int N;
-
-	if ( pars == NULL )
-		oops("ngft_AddWindowsToParts", "Invalid argument: pars is NULL");
-	if ( window_fn == NULL )
-		window_fn = gaussian;
-
-	N = pars->N;
-
-	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets. Ordering doesn't matter
-	for ( ii = 0 ; ii < 2 ; ii++ ) {
-		int jj;
-		FPSET *fpset = pars->fpset + ii;
-		// loop over the partitions in this set
-		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
-			DCMPLX *win;
-			FPART *partition = fpset->partitions + jj;
-			int win_len = partition->width;
-			int fcenter = INDEX_2_FREQ(partition->center,N);	// need actual frequency, not array index
-			// create a window of length N in the frequency domain, centered on fcenter
-			if ( win_len > 1 ) {
-				int kk;
-				DCMPLX *full_win = window_fn( N, fcenter );
-
-				// Subset out the part of the full window overlapping this partition. The partition
-				// values are frequencies, expressed as non-negative indices into the N-length
-				// spectrum of the full window. Full window is centered on fcenter, which is positioned
-				// at array index N/2 - 1 + is_odd
-				win = calloc( win_len, sizeof( *win ) );
-				memcpy( win, full_win + partition->start, win_len * sizeof( *win ) );
-				free( full_win );
-			} else {
-				if ( win_len < 1 )
-					oops( "ngft_AddWindowsToParts", "Application Error: win_len < 1" );	// win_len must be >= 1
-				win = calloc( win_len, sizeof( *win ) );	// win_len is 1
-				win[0].r = 1; win[0].i = 0;
-			}
-
-			partition->window = win;
-			partition->win_len = win_len;
-		}
-	}
+	return win; // length is N
 }
 
 
 // take fast discrete transform of a complex double 1D signal
-DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, int stride) {
+DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, windowFunction *window_fn, int stride) {
 	int ii;
 	BOOL free_pars = FALSE;
 
@@ -587,37 +551,46 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, int stride) 
 		oops( "ngft_1dComplex64", "Invalid argument: Must specify either non-NULL pars, or N > 0" );
 
 	if ( pars == NULL ) {
-		pars = ngft_MakePartsAndWindows( N, gaussian );	// N is used only if pars is NULL
+		pars = ngft_FrequencyPartitions( N );	// N is used only if pars is NULL
 		free_pars = TRUE;
 	} else if ( N > 0 && pars->N != N )
 		smsg( "ngft_1dComplex64", "Warning: Invalid argument: N in pars conflicts with argument N (ignored)" );
 	N = pars->N;
 
+	if ( window_fn == NULL )
+		window_fn = gaussian;
+	
 	stride = MAX(1, stride);	// if stride <= 0, set to default value of 1
 
-	// Do the initial FFT of the signal
+	// get the spectrum of the signal (overwrites input)
 	fft(N, signal, stride);
 
-	// Apply the windows to the FFT, and take the
-	//	inverse FFT to get the S transform
-
 	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets. Ordering doesn't matter
+	// frequency partition sets. Ordering matters for layout of dst array
 	for ( ii = 0 ; ii < 2 ; ii++ ) {
 		int jj;
 		FPSET *fpset = pars->fpset + ii;
 		// loop over the partitions in this set
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			int kk;
+			DCMPLX *win;
 			FPART *partition = fpset->partitions + jj;
+			int width = partition->width;
+			int fcenter = partition->center;
 			int fstart = partition->start;
-			// apply partition window to the transformed data
-			for ( kk = 0 ; kk < partition->win_len ; kk++ ) {
+
+			// get shifted DFT of N-length time-domain window function. Returned length is N
+			win = getShiftedWindow(fcenter, width, N, window_fn);
+
+			// apply the portion of the window within the partition to the transformed data
+			for ( kk = 0 ; kk < width ; kk++ ) {
 				int ff = fstart + kk;
-				cmul(signal + ff * stride, partition->window + kk);
+				cmul(signal + ff * stride, win + ff);
 			}
+			free( win );	// done with window
+
 			// inverse FFT the windowed and transformed data to get this piece of S-space
-			ifft(partition->width, signal + fstart * stride, stride);
+			ifft(width, signal + fstart * stride, stride);
 		}
 	}
 
@@ -627,35 +600,46 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, int stride) 
 
 
 // take inverse fast discrete transform of a complex DST
-DllExport void ngft_1dComplex64Inv( DCMPLX *dst, FPCOL *pars, int stride ) {
+DllExport void ngft_1dComplex64Inv( DCMPLX *dst, FPCOL *pars, windowFunction *window_fn, int stride ) {
 	int ii, N;
 
 	if ( dst == NULL )
 		oops( "ngft_1dComplex64Inv", "Invalid argument: dst is NULL" );
 	if ( pars == NULL )
 		oops( "ngft_1dComplex64Inv", "Invalid argument: Pars is NULL" );
+	N = pars->N;
+
+	if ( window_fn == NULL )
+		window_fn = gaussian;
 
 	stride = MAX( 1, stride );	// if stride <= 0, set to default value of 1
 
-	N = pars->N;
-
 	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets. Ordering doesn't matter
+	// frequency partition sets. Ordering matters for layout of dst array
 	for ( ii = 0 ; ii < 2 ; ii++ ) {
 		int jj;
 		FPSET *fpset = pars->fpset + ii;
 		// loop over the partitions in this set
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			int kk;
+			DCMPLX *win;
 			FPART *partition = fpset->partitions + jj;
+			int width = partition->width;
+			int fcenter = partition->center;
 			int fstart = partition->start;
+
 			// FFT the S-transform over this partition
-			fft(partition->width, dst + fstart * stride, stride);
+			fft(width, dst + fstart * stride, stride);
+
+			// get shifted DFT of N-length time-domain window function. Returned length is N
+			win = getShiftedWindow(fcenter, width, N, window_fn);
+
 			// remove partition window from the transformed data
-			for ( kk = 0 ; kk < partition->win_len ; kk++ ) {
+			for ( kk = 0 ; kk < width ; kk++ ) {
 				int ff = fstart + kk;
-				cdiv(dst + ff * stride, partition->window + kk);
+				cdiv(dst + ff * stride, win + ff);
 			}
+			free( win );	// done with window
 		}
 	}
 
@@ -678,18 +662,18 @@ DllExport void ngft_2dComplex64(DCMPLX *image, int N, int M, windowFunction *win
 	if ( window_fn == NULL )
 		window_fn = gaussian;
 
-	pars = ngft_MakePartsAndWindows(N, window_fn);
+	pars = ngft_FrequencyPartitions(N);
 
 	for ( row = 0 ; row < N ; row++ )
-		ngft_1dComplex64(image + row * N, N, pars, 1);
+		ngft_1dComplex64(image + row * N, N, pars, window_fn, 1);
 
 	if ( M != N ) {
 		free( pars );
-		pars = ngft_MakePartsAndWindows(M, window_fn);
+		pars = ngft_FrequencyPartitions(M);
 	}
 
 	for ( col = 0 ; col < M ; col++ )
-		ngft_1dComplex64(image + col, M, pars, N);
+		ngft_1dComplex64(image + col * M, N, pars, window_fn, 1);
 
 	free( pars );
 }
@@ -747,24 +731,13 @@ DllExport ILIST *freqPartitionCenters(FPCOL *pars, BOOL all_freqs) {
 }
 
 
-// get the maximum partition count over the sets of partitions with common decimation factors
-static int getTimeDim(TPCOL *tpcol) {
-	int ii, t_dim;
-	for ( t_dim = 0, ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
-		TDSET *tdset = tpcol->tdsets + ii;
-		if ( tdset->pcount > t_dim )
-			t_dim = tdset->pcount;
-	}
-	return t_dim;
-}
-
-
 // get the center-values of the time-partition with the most partitions, in order of the partitions
-DllExport ILIST *timePartitionCenters( TPCOL *tpcol ) {
+DllExport ILIST *timePartitionCenters( FPCOL *fpcol ) {
 	int ii, t_dim;
 	TDSET *tdset_max;
 	ILIST *t_centers;
 	int *values;
+	TPCOL *tpcol = fpcol->tpcol;
 
 	// find the partition set with max number of partitions
 	for ( t_dim = 0, tdset_max = NULL, ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
@@ -786,6 +759,18 @@ DllExport ILIST *timePartitionCenters( TPCOL *tpcol ) {
 	t_centers->count = t_dim;
 
 	return t_centers;
+}
+
+
+// get the maximum partition count over the sets of partitions with common decimation factors
+static int getTimeDim(TPCOL *tpcol) {
+	int ii, t_dim;
+	for ( t_dim = 0, ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
+		TDSET *tdset = tpcol->tdsets + ii;
+		if ( tdset->pcount > t_dim )
+			t_dim = tdset->pcount;
+	}
+	return t_dim;
 }
 
 
@@ -826,7 +811,7 @@ static int find_index(FPCOL *pars, TPCOL *tpcol, int ff, int tt, BOOL all_freqs)
 					}
 				}
 			} else {
-				ind += fpart->width;	// fwidth = N / decimation = number of time partitions for this frequency partition
+				ind += fpart->width;	// width = number of time partitions for this frequency partition
 			}
 		}
 	}
@@ -862,22 +847,22 @@ DllExport void freeDImage( DIMAGE *image ) {
 // the image will consist of the Fast S-Transform nearest-neighbor indicies at the specified sampling.
 // The returned image is stored by row, with time on the horizontal axis, and frequency on the vertical.
 // ILISTs of the center times and frequencies are also provided, in units of the original NxN time-freq space
-DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpcol, int M,
+DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, int M,
 												BOOL by_part, BOOL all_freqs, BOOL make_ind_map) {
 	int ii, f_dim, nf_dim, t_dim, nt_dim, img_len, N;
 	ILIST *f_centers = NULL, *t_centers = NULL;
 	DCMPLX *image_arr;
 	DIMAGE *image;
 	double t_factor, f_factor;
+	TPCOL *tpcol;
 	BOOL down_sample, free_tpcol = FALSE;
 
 	if ( (signal == NULL && make_ind_map == FALSE) || pars == NULL )
 		oops( "ngft_1d_InterpolateNN", "Invalid argument: Signal and/or pars is NULL" );
 
-	if ( tpcol == NULL ) {
-		tpcol = ngft_TimePartitions( pars );
-		free_tpcol = TRUE;
-	}
+	if ( pars->tpcol == NULL )
+		oops( "ngft_1d_InterpolateNN", "Application exception: tpcol not set in params" );
+	tpcol = pars->tpcol;
 
 	N = pars->N;
 
@@ -898,7 +883,7 @@ DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpco
 
 	if ( by_part ) {
 		f_centers = freqPartitionCenters( pars, all_freqs );
-		t_centers = timePartitionCenters( tpcol );
+		t_centers = timePartitionCenters( pars );
 	} else {
 		f_centers = calloc( 1, sizeof( *f_centers ) );
 		f_centers->values = calloc( f_dim, sizeof( *(f_centers->values) ) );
@@ -935,7 +920,7 @@ DllExport DIMAGE *ngft_1d_InterpolateNN(DCMPLX *signal, FPCOL *pars, TPCOL *tpco
 	}
 
 	if ( free_tpcol )
-		ngft_FreeTimePartitions(tpcol);
+		freeTimePartitions(tpcol);
 
 	image = calloc( 1, sizeof( *image ) );
 	image->img = calloc(1, sizeof(*(image->img)));

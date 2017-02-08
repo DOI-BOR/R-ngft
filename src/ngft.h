@@ -66,8 +66,7 @@ typedef struct {
 	int center;	// index into N of partition center point (odd width), or next point after center-value (even width)
 	int end;	// index into N of partition ending point
 	int width;	// number of points in partition
-	DCMPLX *window;	// weights for the window centered on partition center-point
-	int win_len;	// length of window: for complete, non-overlapping windows, win_len = end - start + 1
+	TDSET *tdset;	// set of GFT time partitions for this frequency partition
 } FPART;
 
 // structure defining a set of frequency partitions
@@ -85,6 +84,7 @@ typedef struct {
 	// a power of 2, separate partitions allows for simpler code, and there's no performance penalty.
 	int N;	// the length spanned by the partitions
 	FPSET fpset[2];	// array of partitions for non-negative (index 0) and negative (index 1) frequencies
+	TPCOL *tpcol;	// time partition collection corresponding to this frequency partitioning
 } FPCOL;
 
 // collection of double values

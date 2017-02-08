@@ -21,19 +21,15 @@ static void print_freq_partitions(FPCOL *fpcol, FILE *ofile) {
 			int fstart = partition->start;
 			fprintf( ofile, "\tpartition %2d: start=%3d center=%3d end=%3d width=%3d\n",
 							 jj,fstart, partition->center, partition->end, partition->width);
-			// apply partition window to the transformed data
-			for ( kk = 0 ; kk < partition->win_len ; kk++ ) {
-				int ff = fstart + kk;
-				DCMPLX *val = partition->window + kk;
-				fprintf( ofile, "\t\t%3d %10.3e %10.3e\t%9.3e\n", ff, val->r, val->i, modulus(val));
-			}
 		}
 	}
 	fflush( ofile );
 }
 
-static void print_time_partitions( TPCOL* tpcol, FILE *ofile ) {
+static void print_time_partitions( FPCOL* fpcol, FILE *ofile ) {
 	int ii;
+	TPCOL* tpcol = fpcol->tpcol;
+
 	fprintf( ofile, "\nTime partitions: N=%d, tdcount=%3d\n", tpcol->N, tpcol->tdcount);
 	for ( ii = 0 ; ii < tpcol->tdcount ; ii++ ) {
 		int jj;
@@ -62,7 +58,6 @@ int main( int argc, char **argv ) {
 	int stride = 1, image_dim = -1;
 	windowFunction *window_fn = NULL;
 	FPCOL *partitions;
-	TPCOL *tpcol;
 
 	progname = (cp = strrchr(*argv,PATH_SEP)) != (char *)NULL ? cp+1 : *argv;
 	while ( --argc ) {
@@ -131,33 +126,29 @@ int main( int argc, char **argv ) {
 		return 1;
 
 	if ( sizeof( DCMPLX ) != sizeof( fftw_complex ) ) {
-		fprintf( stderr, "Warning: sizeof(DCMPLX) = %d is not equal to sizeof(fftw_complex) = %d",
+		fprintf( stderr, "Warning: sizeof(DCMPLX) = %zd is not equal to sizeof(fftw_complex) = %zd",
 						 sizeof( DCMPLX ), sizeof( fftw_complex ) );
 		fflush( stderr );
 	}
 
 	/* initialize */
+	partitions = ngft_FrequencyPartitions(dcount);
 	window_fn = gaussian_window ? gaussian : box;
-	partitions = ngft_DyadicPartitions(dcount);
-	ngft_AddWindowsToParts(partitions, window_fn);
-	
+
 	// Call 1D GFT Function
 	if ( do_inverse ) {
-		ngft_1dComplex64Inv( cts, partitions, stride );
+		ngft_1dComplex64Inv( cts, partitions, window_fn, stride );
 		fprintf( outfile, "# INV: Re(z)   Im(z)        |z|\n" );
 	} else {
-		ngft_1dComplex64( cts, dcount, partitions, stride );
+		ngft_1dComplex64( cts, dcount, partitions, window_fn, stride );
 		fprintf( outfile, "# FST: Re(z)   Im(z)        |z|\n" );
 	}
 	for ( ii = 0 ; ii < dcount ; ii++ )
 		fprintf( outfile, "%10.3e %10.3e\t %9.3e\n", cts[ii].r, cts[ii].i, modulus(cts+ii) );
 
 	if ( do_image ) {
-		// get time partitions
-		tpcol = ngft_TimePartitions( partitions );
-
 		// get complex image
-		image = ngft_1d_InterpolateNN(cts, partitions, tpcol, image_dim, by_part, all_freqs, ind_map);
+		image = ngft_1d_InterpolateNN(cts, partitions, image_dim, by_part, all_freqs, ind_map);
 
 		// print the image or index map
 		fprintf( outfile, "\n%s%s:\n", ind_map ? "Index map" : "Image",  all_freqs ? " (all frequencies)" : " (non-negative frequencies)");
@@ -179,15 +170,13 @@ int main( int argc, char **argv ) {
 
 		// print the frequency and time partitions
 		print_freq_partitions(partitions, outfile);
-		print_time_partitions(tpcol, outfile);
+		print_time_partitions(partitions, outfile);
+
+		freeDImage( image );
 	}
 
 	free(cts);
 	ngft_FreeFreqPartitions( partitions );
-	if ( do_image ) {
-		freeDImage( image );
-		ngft_FreeTimePartitions( tpcol );
-	}
 
 	return 0;
 }
