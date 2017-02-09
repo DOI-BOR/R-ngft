@@ -16,7 +16,6 @@ static void print_freq_partitions(FPCOL *fpcol, FILE *ofile) {
 		// loop over the partitions in this set
 		fprintf( ofile, "    %s frequencies:\n", ii == 0 ? "non-negative" : "negative" );
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
-			int kk;
 			FPART *partition = fpset->partitions + jj;
 			int fstart = partition->start;
 			fprintf( ofile, "\tpartition %2d: start=%3d center=%3d end=%3d width=%3d\n",

@@ -566,7 +566,7 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, windowFuncti
 
 	if ( window_fn == NULL )
 		window_fn = gaussian;
-	
+
 	stride = MAX(1, stride);	// if stride <= 0, set to default value of 1
 
 	// get the spectrum of the signal (overwrites input)
@@ -587,7 +587,7 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, windowFuncti
 			int width = partition->width;
 
 			// get shifted DFT of N-length time-domain window function. Returned length is N
-			win = getShiftedWindow(fcenter, width, N, window_fn);
+			win = getShiftedWindow(fcenter, width, N, window_fn); // length is N
 
 			// apply the portion of the window within the partition to the transformed data
 			for ( kk = 0 ; kk < width ; kk++ ) {
@@ -622,7 +622,8 @@ DllExport void ngft_1dComplex64Inv( DCMPLX *dst, FPCOL *pars, windowFunction *wi
 	stride = MAX( 1, stride );	// if stride <= 0, set to default value of 1
 
 	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets. Ordering matters for layout of dst array
+	// frequency partition sets. Ordering matters for layout of dst array,
+	// and must be same as used for forward transform
 	for ( ii = 0 ; ii < 2 ; ii++ ) {
 		int jj;
 		FPSET *fpset = pars->fpset + ii;
@@ -639,7 +640,7 @@ DllExport void ngft_1dComplex64Inv( DCMPLX *dst, FPCOL *pars, windowFunction *wi
 			fft(width, dst + fstart * stride, stride);
 
 			// get shifted DFT of N-length time-domain window function. Returned length is N
-			win = getShiftedWindow(fcenter, width, N, window_fn);
+			win = getShiftedWindow(fcenter, width, N, window_fn); // length is N
 
 			// remove partition window from the transformed data
 			for ( kk = 0 ; kk < width ; kk++ ) {

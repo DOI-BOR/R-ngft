@@ -91,7 +91,7 @@ typedef struct {
 	// frequency array does when N is not a power of 2. For example, consider an array of length 6, where the non-neg sets are
 	// {0}, {1}, and {2,3}, but the negative sets are {-1} and {-2} (rather {-2,-3}, because there is no f = -3). Even when N is
 	// a power of 2, separate partitions allows for simpler code, and there's no performance penalty.
-	int N;	// the length spanned by the partitions
+	int N;	// the data length spanned by the partitions
 	FPSET fpset[2];	// array of partitions for non-negative (index 0) and negative (index 1) frequencies
 	TPCOL *tpcol;	// time partition collection corresponding to this frequency partitioning
 } FPCOL;
