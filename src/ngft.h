@@ -30,13 +30,22 @@ typedef DCMPLX *(windowFunction)(int,int);
 //	For this layout:
 //		index(f >= 0) = f, which spans [0, N/2]    (even or odd N)
 //		index(f < 0) = N - |f|, which spans [N/2 + 1, N - 1]    (even or odd N)
+
 // Get the bounded index for a non-negative frequency f in an array of length N, where N can be odd or even
 #define NONNEG_F_IND(f,N)	MIN(MAX(0, (f)), (N)/2)
+
 // Get the bounded index for a negative frequency -|f| in an array of length N, where N can be odd or even
 #define NEG_F_IND(f,N)	MIN(MAX((N) - ABS(f), (N)/2 + 1), (N) - 1)
-// convert an index to a frequency; assumes 0 <= f < N
+
+// convert an index to a frequency; assumes 0 <= index < N, and -(N+1)/2 < f <= N/2
 #define INDEX_2_FREQ(i,N)	((i) <= (N)/2 ? (i) : (i) - (N))
 #define FREQ_2_INDEX(f,N) ((f) < 0 ? (N) - ABS(f) : (f))
+
+// conversion between indicies (or positive frequencies) defining the start, center, and end of windows
+#define CENTER_2_END(center,width,left_bias)	((left_bias) ? (center) + (width) / 2 : (center) + ((width) + 1) / 2 - 1)
+#define END_2_CENTER(end,width,left_bias)	((left_bias) ? (end) - (width) / 2 : (end) - ((width) + 1) / 2 + 1)
+#define CENTER_2_START(center,width,left_bias)	((left_bias) ? (center) - ((width) + 1) / 2 + 1 : (center) - (width) / 2)
+#define START_2_CENTER(start,width,left_bias)	((left_bias) ? (start) + ((width) + 1) / 2 - 1 : (start) + (width) / 2)
 
 // structure defining a time partition
 typedef struct {
@@ -66,6 +75,8 @@ typedef struct {
 	int center;	// index into N of partition center point (odd width), or next point after center-value (even width)
 	int end;	// index into N of partition ending point
 	int width;	// number of points in partition
+	int win_start;	// index into N of window starting point. window is not allowed to wrap
+	int win_end;	// index into N of window ending point. window is not allowed to wrap
 	int win_len;	// length of window to be applied: for non-overlapping windows (fast GFT), win_len = width
 	int dst_start;	// index in dst to start of row of S-transform values for this frequency partition, of length win_len. Note that dt_st = dt * N / win_len
 	TDSET *tdset;	// set of GFT time partitions for this frequency partition
