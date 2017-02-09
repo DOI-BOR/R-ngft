@@ -632,14 +632,14 @@ DllExport void ngft_1dComplex64(DCMPLX **signal, int *N, FPCOL **fpcol, windowFu
 		// loop over the partitions in this set
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			int kk;
-			DCMPLX *win, *spectrum_copy, *partial_gft;
+			DCMPLX *win, *spectrum_copy;
 			FPART *partition = fpset->partitions + jj;
 			int fcenter = INDEX_2_FREQ(partition->center, NN);	// need actual frequency, not index
 			int win_start = partition->win_start;
 			int win_len = partition->win_len;
 
 			// get shifted DFT of N-length time-domain window function. Returned length is N
-			win = getShiftedWindow(fcenter, win_len, N, window_fn);
+			win = getShiftedWindow(fcenter, win_len, NN, window_fn);
 
 			// make a copy of the spectrum, and apply shifted window
 			spectrum_copy = calloc( win_len, sizeof( *spectrum_copy ) );
@@ -658,7 +658,7 @@ DllExport void ngft_1dComplex64(DCMPLX **signal, int *N, FPCOL **fpcol, windowFu
 			partition->dst_start = dst_size;
 			dst_size += win_len;
 			dst = realloc( dst, dst_size * sizeof( *dst ) );
-			memcpy( dst + partition->dst_start, partial_gft, win_len * sizeof( *dst ) );
+			memcpy( dst + partition->dst_start, spectrum_copy, win_len * sizeof( *dst ) );
 
 			free( spectrum_copy );
 
@@ -672,6 +672,31 @@ DllExport void ngft_1dComplex64(DCMPLX **signal, int *N, FPCOL **fpcol, windowFu
 	free( *signal );
 	*signal = dst;
 	*N = dst_size;
+}
+
+
+// Subset out win_len points from an array of DCMPLX spectral data centered at
+// frequency 0, and of length N. Original data is not modified. Returns
+// pointer to subsetted data, which caller must free.
+static DCMPLX *spectrum_subset( DCMPLX *data, int N, int win_len ) {
+	int s1, l1, s2, l2;
+	DCMPLX *subset;
+
+	// create space for the subset
+	subset = calloc( win_len, sizeof( *subset ) );
+
+	// get start index and length for copying the non-negative frequencies, and copy
+	s1 = 0;
+	l1 = (win_len + 1) / 2;	// first win_len/2 points (win_len even) or win_len/2 + 1 points (win_len odd)
+	memcpy( subset, data + s1 , l1 * sizeof( *subset ) );
+
+	// get start index and length for copying the negative frequencies, and copy
+	s2 = N - l1;
+	l2 = win_len - l1;
+	if ( l2 > 0 )
+		memcpy( subset + l1, data + s2, l2 * sizeof( *subset ) );
+
+	return subset;
 }
 
 
