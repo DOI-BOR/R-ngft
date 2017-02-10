@@ -105,11 +105,12 @@ int main( int argc, char **argv ) {
 	cts = NULL;
 	while ( fgets( line, sizeof( line ), infile ) != NULL ) {
 		line_no++;
+		/* strip the newline and any other whitespace */
+		while ( strlen( line ) > 0 && isspace( line[strlen( line ) - 1] ) )
+			line[strlen( line ) - 1] = '\0';
 		/* skip comment lines */
 		if ( *line == '#' || *line == '*' || strlen( line ) < 1 )
 			continue;
-		/* strip the newline */
-		line[strlen( line ) - 1] = '\0';
 		cts = realloc( cts, ++dcount * sizeof( *cts ) );
 		if ( do_inverse ) {
 			sscanf( line, "%lf %lf", &cts[dcount - 1].r, &cts[dcount - 1].i );

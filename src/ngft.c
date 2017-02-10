@@ -28,7 +28,7 @@
 
 // For odd width partitions, center is unambiguous. For even width, center can be at
 // the end of the left half (left_bias=T), or the start of the right half (left_bias=F).
-BOOL left_bias = FALSE;	// FALSE seems to give better contrast for resolving impulses, and better inverse
+BOOL left_bias = FALSE;
 
 
 // fftw wrapper from original GFT library
@@ -234,8 +234,7 @@ static void fill_tdset(int N, FPART *fpart, TDSET *tdset) {
 		partition->start = tc;
 		partition->width = ROUND( tc_exact + exact_width - tc );
 		partition->end = partition->start + partition->width - 1;
-		partition->center = left_bias ? partition->end - partition->width / 2 :
-			partition->start + partition->width / 2;
+		partition->center = START_2_CENTER( partition->start, partition->width, left_bias );
 
 		tc += partition->width;
 	}
@@ -326,7 +325,7 @@ static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N) {
 	width = end - start + 1;
 	// for odd width, center is unambiguous. For even width, center can be at end
 	// of the left half (left_bias=T), or the start of the right half (left_bias=F).
-	center = START_2_CENTER( start, width, left_bias );
+	center = START_2_CENTER( start, width, ( left_bias && fs > 0 ) || ( ! left_bias && fs < 0 ) );
 
 	// set indices [0, N-1] into the N-length frequency array, using standard DFT order
 	p->start = start;
@@ -583,7 +582,7 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, windowFuncti
 			DCMPLX *win;
 			FPART *partition = fpset->partitions + jj;
 			int fcenter = INDEX_2_FREQ(partition->center, N);	// need actual frequency, not index
-			int fstart = partition->start;
+			int start = partition->start;
 			int width = partition->width;
 
 			// get shifted DFT of N-length time-domain window function. Returned length is N
@@ -591,13 +590,13 @@ DllExport void ngft_1dComplex64(DCMPLX *signal, int N, FPCOL *pars, windowFuncti
 
 			// apply the portion of the window within the partition to the transformed data
 			for ( kk = 0 ; kk < width ; kk++ ) {
-				int ff = fstart + kk;
+				int ff = start + kk;
 				cmul(signal + ff * stride, win + ff);
 			}
 			free( win );	// done with window
 
 			// inverse FFT the windowed and transformed data to get this piece of S-space
-			ifft(width, signal + fstart * stride, stride);
+			ifft(width, signal + start * stride, stride);
 		}
 	}
 
@@ -632,19 +631,19 @@ DllExport void ngft_1dComplex64Inv( DCMPLX *dst, FPCOL *pars, windowFunction *wi
 			int kk;
 			DCMPLX *win;
 			FPART *partition = fpset->partitions + jj;
-			int fcenter = INDEX_2_FREQ(partition->center, N);	// need actual frequency, not index			int width = partition->width;
-			int fstart = partition->start;
+			int fcenter = INDEX_2_FREQ(partition->center, N);	// need actual frequency, not index
+			int start = partition->start;
 			int width = partition->width;
 
 			// FFT the S-transform over this partition
-			fft(width, dst + fstart * stride, stride);
+			fft(width, dst + start * stride, stride);
 
 			// get shifted DFT of N-length time-domain window function. Returned length is N
 			win = getShiftedWindow(fcenter, width, N, window_fn); // length is N
 
 			// remove partition window from the transformed data
 			for ( kk = 0 ; kk < width ; kk++ ) {
-				int ff = fstart + kk;
+				int ff = start + kk;
 				cdiv(dst + ff * stride, win + ff);
 			}
 			free( win );	// done with window
@@ -802,20 +801,16 @@ static int find_index(FPCOL *pars, int ff, int tt, BOOL all_freqs) {
 			FPART *fpart = fpset->partitions + jj;
 			if ( fpart->start <= f_target && f_target <= fpart->end ) {
 				// frequency is in this partition; now check time partitions
+				int kk;
 				TDSET *tdset = fpart->tdset;
 				if ( tdset == NULL )
 					oops( "find_index", "Application exception: tdset for this partition is NULL" );
-				// check that time-partition decimation and frequency-partition window length correspond
-				if ( tdset->decimation == N / fpart->width ) {
-					int ll;
-					for ( ll = 0 ; ll < tdset->pcount ; ll++, ind++ ) {
-						// search for the partition with matching time
-						TPART *tpart = tdset->partitions + ll;
-						if ( tpart->start <= t_target && t_target <= tpart->end )
-							return ind;	// cool
-					}
-				} else
-					oops( "find_index", "Application exception: tsdet doesn't match fpart" );
+				for ( kk = 0 ; kk < tdset->pcount ; kk++, ind++ ) {
+					// search for the partition with matching time
+					TPART *tpart = tdset->partitions + kk;
+					if ( tpart->start <= t_target && t_target <= tpart->end )
+						return ind;	// cool
+				}
 			} else {
 				ind += fpart->width;	// width = number of time partitions for this frequency partition
 			}

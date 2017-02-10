@@ -41,7 +41,7 @@ typedef DCMPLX *(windowFunction)(int,int);
 #define INDEX_2_FREQ(i,N)	((i) <= (N)/2 ? (i) : (i) - (N))
 #define FREQ_2_INDEX(f,N) ((f) < 0 ? (N) - ABS(f) : (f))
 
-// conversion between indicies (or positive frequencies) defining the start, center, and end of windows
+// conversion between indicies defining the start, center, and end of windows
 #define CENTER_2_END(center,width,left_bias)	((left_bias) ? (center) + (width) / 2 : (center) + ((width) + 1) / 2 - 1)
 #define END_2_CENTER(end,width,left_bias)	((left_bias) ? (end) - (width) / 2 : (end) - ((width) + 1) / 2 + 1)
 #define CENTER_2_START(center,width,left_bias)	((left_bias) ? (center) - ((width) + 1) / 2 + 1 : (center) - (width) / 2)
