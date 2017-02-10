@@ -234,8 +234,7 @@ static void fill_tdset(int N, FPART *fpart, TDSET *tdset) {
 		partition->start = tc;
 		partition->width = ROUND( tc_exact + exact_width - tc );
 		partition->end = partition->start + partition->width - 1;
-		partition->center = left_bias ? partition->end - partition->width / 2 :
-			partition->start + partition->width / 2;
+		partition->center = START_2_CENTER( partition->start, partition->width, left_bias );
 
 		tc += partition->width;
 	}
@@ -326,7 +325,7 @@ static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N) {
 	width = end - start + 1;
 	// for odd width, center is unambiguous. For even width, center can be at end
 	// of the left half (left_bias=T), or the start of the right half (left_bias=F).
-	center = START_2_CENTER( start, width, left_bias );
+	center = START_2_CENTER( start, width, ( left_bias && fs > 0 ) || ( ! left_bias && fs < 0 ) );
 
 	// set indices [0, N-1] into the N-length frequency array, using standard DFT order
 	p->start = start;
@@ -587,7 +586,7 @@ static DCMPLX *getShiftedWindow(int fcenter, int width, int N, windowFunction *w
 		win = calloc( N, sizeof( *win ) );
 		win[0].r = 1;
 	} else { // width > 1
-					 // get DFT of time-domain window of length N, centered on freq=0
+		// get DFT of time-domain window of length N, centered on freq=0
 		win = window_fn(N, fcenter);
 	}
 
@@ -639,7 +638,7 @@ DllExport void ngft_1dComplex64(DCMPLX **signal, int *N, FPCOL **fpcol, windowFu
 			int win_len = partition->win_len;
 
 			// get shifted DFT of N-length time-domain window function. Returned length is N
-			win = getShiftedWindow(fcenter, win_len, NN, window_fn);
+			win = getShiftedWindow(fcenter, win_len, NN, window_fn); // length is N
 
 			// make a copy of the spectrum, and apply shifted window
 			spectrum_copy = calloc( win_len, sizeof( *spectrum_copy ) );
@@ -648,7 +647,7 @@ DllExport void ngft_1dComplex64(DCMPLX **signal, int *N, FPCOL **fpcol, windowFu
 				spectrum_copy[kk] = (*signal)[ff * stride];
 				cmul( spectrum_copy + kk, win + kk );
 			}
-			free( win );
+			free( win );	// done with window
 
 			// inverse FFT the windowed and transformed data to get this piece of S-space
 			ifft( win_len, spectrum_copy, stride );
@@ -748,9 +747,9 @@ DllExport void ngft_1dComplex64Inv( DCMPLX **dst, FPCOL **fpcol, windowFunction 
 			fft(win_len, dst_copy, stride);
 
 			// get shifted DFT of N-length time-domain window function. Returned length is N
-			win = getShiftedWindow(fcenter, win_len, N, window_fn);
+			win = getShiftedWindow(fcenter, win_len, N, window_fn); // length is N
 
-			// remove partition window from the FFT of this part of the S-transform
+			// remove partition window from the transformed data
 			for ( kk = 0 ; kk < win_len ; kk++ )
 				cdiv( dst_copy + kk * stride, win + kk );
 
@@ -924,20 +923,16 @@ static int find_index(FPCOL *pars, int ff, int tt, BOOL all_freqs) {
 			FPART *fpart = fpset->partitions + jj;
 			if ( fpart->start <= f_target && f_target <= fpart->end ) {
 				// frequency is in this partition; now check time partitions
+				int kk;
 				TDSET *tdset = fpart->tdset;
 				if ( tdset == NULL )
 					oops( "find_index", "Application exception: tdset for this partition is NULL" );
-				// check that time-partition decimation and frequency-partition window length correspond
-				if ( tdset->decimation == N / fpart->win_len ) {
-					int ll;
-					for ( ll = 0 ; ll < tdset->pcount ; ll++, ind++ ) {
-						// search for the partition with matching time
-						TPART *tpart = tdset->partitions + ll;
-						if ( tpart->start <= t_target && t_target <= tpart->end )
-							return ind;	// cool
-					}
-				} else
-					oops( "find_index", "Application exception: tsdet doesn't match fpart" );
+				for ( kk = 0 ; kk < tdset->pcount ; kk++, ind++ ) {
+					// search for the partition with matching time
+					TPART *tpart = tdset->partitions + kk;
+					if ( tpart->start <= t_target && t_target <= tpart->end )
+						return ind;	// cool
+				}
 			} else {
 				ind += fpart->win_len;	// win_len = number of time partitions for this frequency partition
 			}
@@ -1057,4 +1052,3 @@ DllExport void freeDImage( DIMAGE *image ) {
 		free( image );
 	}
 }
-
