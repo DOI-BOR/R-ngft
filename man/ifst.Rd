@@ -4,14 +4,30 @@
 \alias{ifst}
 \title{Fast Inverse S-Transform}
 \usage{
-ifst(dst, dt = 0.01, gauss = NA)
+ifst(dst, ts_len, dt = 0.01, eps = 0, win.type = NA, part.type = NA)
 }
 \arguments{
-\item{dst}{Fast S-transform. Must convert to complex vector.}
+\item{dst}{Fast S-transform, as returned by \code{\link{fst}}. Must convert to complex vector.}
+
+\item{ts_len}{Length of the original time series input to \code{\link{fst}}.}
 
 \item{dt}{Sample interval, in seconds. Default is 0.01.}
 
-\item{gauss}{TRUE for Gaussian windows, FALSE for Box windows. Default is TRUE.}
+\item{eps}{Fractional window overlap, dimensionless. Default is 0.0.}
+
+\item{win.type}{\describe{
+\item{Gaussian}{\code{c("ga","gauss")}}
+\item{Box}{\code{c("b","box")}}
+}
+Characters are case-insensitive, and only need to uniquely
+define the option. Default is \code{Gaussian}.}
+
+\item{part.type}{\describe{
+\item{Dyadic}{\code{c("dy","dyadic")}}
+\item{Equal Temperament}{\code{c("eq","et")}}
+}
+Characters are case-insensitive, and only need to uniquely
+define the option. Default is \code{Dyadic}.}
 }
 \value{
 A list including the complex time series of the data, and
@@ -44,4 +60,3 @@ S-Transform Spectrum Nonredundantly.
 }
 }
 \keyword{ts}
-

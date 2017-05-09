@@ -35,6 +35,6 @@ image(x=xvals, y=yvals, z=img.plt,
 xvals <- dt * fst.delta$t.centers
 yvals <- df * fst.delta$f.centers
 img.plt <- t(log(abs(fst.delta$image)))
-image2D(img.plt, x=xvals, y=yvals, xlab="time, sec.", ylab="frequency, Hz.")
+plot3D::image2D(img.plt, x=xvals, y=yvals, xlab="time, sec.", ylab="frequency, Hz.")
 
 

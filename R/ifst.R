@@ -3,9 +3,22 @@
 #' \code{ifst} is used to compute the fast inverse S-transform of a complex,
 #' univariate S-transform.
 #'
-#' @param dst Fast S-transform. Must convert to complex vector.
+#' @param dst Fast S-transform, as returned by \code{\link{fst}}. Must convert to complex vector.
+#' @param ts_len Length of the original time series input to \code{\link{fst}}.
 #' @param dt Sample interval, in seconds. Default is 0.01.
-#' @param gauss TRUE for Gaussian windows, FALSE for Box windows. Default is TRUE.
+#' @param eps Fractional window overlap, dimensionless. Default is 0.0.
+#' @param part.type \describe{
+#' \item{Dyadic}{\code{c("dy","dyadic")}}
+#' \item{Equal Temperament}{\code{c("eq","et")}}
+#' }
+#' Characters are case-insensitive, and only need to uniquely
+#' define the option. Default is \code{Dyadic}.
+#' @param win.type \describe{
+#' \item{Gaussian}{\code{c("ga","gauss")}}
+#' \item{Box}{\code{c("b","box")}}
+#' }
+#' Characters are case-insensitive, and only need to uniquely
+#' define the option. Default is \code{Gaussian}.
 #' @return A list including the complex time series of the data, and
 #' the window type used.
 #' @details If Gaussian windows are selected, the results are discrete S-transforms.
@@ -27,7 +40,7 @@
 #' \item \href{https://sourceforge.net/projects/fst-uofc/}{Original GFT library at SourceForge}
 #' }
 #' @keywords ts
-ifst <- function(dst, dt=0.01, gauss=NA) {
+ifst <- function(dst, ts_len, dt=0.01, eps=0.0, win.type=NA, part.type=NA) {
 
   xt <- as.double(xt[!is.na(xt)])
   len <- length(xt)
@@ -36,6 +49,7 @@ ifst <- function(dst, dt=0.01, gauss=NA) {
 
   # call C function
   out <- .Call("CALLngft_1dComplex64Inv",
-               as.complex(dst), as.double(dt), as.logical(gauss))
+               as.complex(gft), as.integer(ts_len), as.double(dt),
+               as.double(eps), as.character(part.type), as.character(win.type))
   return(out)
 }

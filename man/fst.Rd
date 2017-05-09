@@ -4,15 +4,29 @@
 \alias{fst}
 \title{Fast S-Transform}
 \usage{
-fst(xt, dt = 0.01, gauss = TRUE, img.dim = NA, by.part = TRUE,
-  all.freqs = FALSE, ind.map = FALSE)
+fst(xt, dt = 0.01, eps = 0, win.type = NA, part.type = NA,
+  img.dim = NA, by.part = TRUE, all.freqs = FALSE)
 }
 \arguments{
 \item{xt}{Equally-sampled input time series. Must convert to numeric vector.}
 
 \item{dt}{Sample interval, in seconds. Default is 0.01.}
 
-\item{gauss}{TRUE for Gaussian windows, FALSE for Box windows. Default is TRUE.}
+\item{eps}{Fractional window overlap, dimensionless. Default is 0.0.}
+
+\item{win.type}{\describe{
+\item{Gaussian}{\code{c("ga","gauss")}}
+\item{Box}{\code{c("b","box")}}
+}
+Characters are case-insensitive, and only need to uniquely
+define the option. Default is \code{Gaussian}.}
+
+\item{part.type}{\describe{
+\item{Dyadic}{\code{c("dy","dyadic")}}
+\item{Equal Temperament}{\code{c("eq","et")}}
+}
+Characters are case-insensitive, and only need to uniquely
+define the option. Default is \code{Dyadic}.}
 
 \item{img.dim}{Image dimension of transform, in pixels. Default is no downsampling.}
 
@@ -21,9 +35,6 @@ N time and frequency values. Default is TRUE}
 
 \item{all.freqs}{Image contains negative as well as non-negative frequencies.
 Default is FALSE.}
-
-\item{ind.map}{Image contains the index of the S-Transform value, rather than
-the value. Useful for understanding partitions. Default is FALSE.}
 }
 \value{
 A list including the complex S-transform of the data, an image sampled on
@@ -58,4 +69,3 @@ S-Transform Spectrum Nonredundantly.
 }
 }
 \keyword{ts}
-
