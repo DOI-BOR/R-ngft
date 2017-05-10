@@ -289,6 +289,10 @@ static void make_tdset(int N, FPART *fpart, TDSET *tdset) {
 
 		tc += partition->width;
 	}
+
+	// sanity check
+	if ( tdset->pcount != fwin_width )
+		oops("make_tdset", "Application exception: tdset->pcount != fwin_width");
 }
 
 
@@ -426,7 +430,6 @@ static FPCOL *dyadicPartitions(int N, double epsilon) {
 	int fs, pcount, n_pcount;
 	FPART *partitions, *n_partitions, *tmp;
 	FPCOL *partition_collection;
-	BOOL N_is_odd = (N % 2 == 0 ? FALSE : TRUE);
 
 	if ( N <= 0 )
 		oops( "dyadicPartitions", "Invalid argument: N <= 0" );
@@ -444,7 +447,7 @@ static FPCOL *dyadicPartitions(int N, double epsilon) {
 		// add positive frequencies
 		add_dyadic_partition( &partitions, &pcount, fs, N, epsilon );
 		// add negative frequencies (except for Nyquist, unless N is odd)
-		if ( fs < N/2 || N_is_odd )
+		if ( fs < N/2 || IS_ODD(N) )
 			add_dyadic_partition( &n_partitions, &n_pcount, -fs, N, epsilon );
 	}
 
@@ -556,7 +559,7 @@ DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionTy
 		oops( "ngft_FrequencyPartitions", "Invalid argument: N <= 0" );
 
 	// require fractional amount of overlap to be between 0 and 1
-	epsilon = MAX( MIN( epsilon, 0 ), 1 );
+	epsilon = MIN( MAX( epsilon, 0 ), 1 );
 
 	// make the selected type of frequency partition
 	if ( ptype == FP_DYADIC )
@@ -612,8 +615,7 @@ DllExport void ngft_FreeFreqPartitions(FPCOL *pars) {
 		FPSET* fpset = pars->fpset + ii;
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			FPART *fpart = fpset->partitions + jj;
-			free(fpart->tdset);
-			free(fpart->gft);
+			freeDClist(fpart->gft);
 		}
 		free( fpset->partitions );
 	}
@@ -689,9 +691,9 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 			// make DST and apply the window to the spectrum
 			dst = calloc( win_len, sizeof( *dst ) );
 			for ( kk = 0 ; kk < win_len ; kk++ ) {
-				int ff = (win_start + kk) % N; // handles wrap-around
-				dst[kk] = signal[ff];
-				cmul( dst + kk, win + ff );
+				int f_idx = (win_start + kk) % N; // get frequency index, handling wrap-around
+				dst[kk] = signal[f_idx];
+				cmul( dst + kk, win + f_idx );
 			}
 			free( win );	// done with window
 
@@ -762,8 +764,9 @@ DllExport void ngft_unpackGftArray(DCLIST *gft, FPCOL *fpcol) {
 			if ( dst_current + p_len > dst_len )
 				oops("ngft_unpackGftArray", "Application exception: gft length is too short for partitions");
 			fpart->gft = calloc(1, sizeof(*(fpart->gft)));
-			fpart->gft->values = calloc(p_len, sizeof(*(fpart->gft->values)));
+			fpart->gft->values = calloc(p_len, sizeof(*dst));
 			memcpy(fpart->gft->values, dst + dst_current, p_len * sizeof(*dst));
+			fpart->gft->count = p_len;
 			dst_current += p_len;
 		}
 	}
@@ -809,7 +812,7 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 
 			// make a copy of this partition's part of the S-transform, so as not to modify original
 			dst_copy = calloc( win_len, sizeof( *dst_copy ) );
-			memcpy(dst_copy, partition->gft, win_len * sizeof(*dst_copy));
+			memcpy(dst_copy, partition->gft->values, partition->gft->count * sizeof(*dst_copy));
 
 			// FFT this partition's part of the S-transform
 			fft(win_len, dst_copy, stride);
@@ -819,11 +822,11 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 
 			// remove partition window from the transformed dst
 			for ( kk = 0 ; kk < win_len ; kk++ ) {
-				int ff = (win_start + kk) % N; // handles wrap-around
-				cdiv( dst_copy + kk, win + ff );
+				int f_idx = (win_start + kk) % N; // get frequency index, handling wrap-around
+				cdiv( dst_copy + kk, win + f_idx );
 				// subset out those frequencies contained within the partition (drop overlapped points)
-				if ( start <= ff && ff <= end )
-					signal[ff] = dst_copy[kk];
+				if ( start <= f_idx && f_idx <= end )
+					signal[f_idx] = dst_copy[kk];
 			}
 			free( dst_copy );
 			free( win );

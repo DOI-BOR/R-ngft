@@ -101,7 +101,7 @@ typedef struct {
 	int win_end;	// index into N of frequency window ending point
 	int win_len;	// length of frequency window to be applied: for non-overlapping windows (fast GFT), win_len = width
 	TDSET *tdset;	// pointer to the set of GFT time partitions for this frequency partition
-	DCLIST *gft;	// pointer to GFT(t,f) for f = this center frequency. Length is tdset->pcount
+	DCLIST *gft;	// pointer to GFT(t,f) for f = this center frequency. Length is win_len (= tdset->pcount)
 } FPART;
 
 // set of frequency partitions

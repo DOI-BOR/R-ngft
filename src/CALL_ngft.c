@@ -8,19 +8,18 @@
 DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype_s, SEXP wtype_s,
 																		SEXP image_dim_i, SEXP by_part_l, SEXP all_freqs_l)
 {
-	int ii, jj, pcnt = 0, nf, nt;
+	int ii, jj, pcnt = 0, nf, nt, *ip;
 	DCMPLX *cts;
 	DCLIST *signal, *gft;
 	DIMAGE *image;
 	Rcomplex *ctp;
-	double *dp;
 	FPCOL *partitions;
 	SEXP ret_l, names_s;
 	SEXP epsilon_d;
 	SEXP part_name_s, win_name_s;
 	SEXP gft_c, cts_img_c;
 	SEXP img_wd_i, img_ht_i;
-	SEXP freq_centers_d, time_centers_d;
+	SEXP freq_centers_i, time_centers_i;
 	SEXP ts_len_i;
 
 	double *ts = REAL(ts_d);
@@ -38,9 +37,9 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	BOOL all_freqs = asLogical( all_freqs_l ) == NA_LOGICAL ? FALSE : LOGICAL( all_freqs_l )[0];
 
 	if ( n_samples < 3 )
-		error("time series must have at least 3 points");
+		oops("CALLngft_1dComplex64", "time series must have at least 3 points");
 	if ( dt <= 0 )
-		error("dt must be positive");
+		oops("CALLngft_1dComplex64", "dt must be positive");
 
 	// copy the data
 	if ( (cts = calloc( n_samples, sizeof( *cts ) )) == NULL )
@@ -86,23 +85,24 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 			ctp[ll].i = image->img->values[kk].i;
 		}
 	}
-	freeDImage(image);
 
 	// image width and height
 	img_wd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(img_wd_i)[0] = nt; // time
 	img_ht_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(img_ht_i)[0] = nf; // frequency
 
 	// frequency centers
-	freq_centers_d = PROTECT(allocVector(REALSXP, nf)); pcnt++;
-	dp = REAL( freq_centers_d );
+	freq_centers_i = PROTECT(allocVector(INTSXP, nf)); pcnt++;
+	ip = INTEGER( freq_centers_i );
 	for ( ii = 0 ; ii < nf ; ii++ )
-		dp[ii] = image->y_centers->values[ii];
+		ip[ii] = image->y_centers->values[ii];
 
 	// time centers
-	time_centers_d = PROTECT(allocVector(REALSXP, nt)); pcnt++;
-	dp = REAL( time_centers_d );
+	time_centers_i = PROTECT(allocVector(INTSXP, nt)); pcnt++;
+	ip = INTEGER( time_centers_i );
 	for ( ii = 0 ; ii < nt ; ii++ )
-		dp[ii] = image->x_centers->values[ii];
+		ip[ii] = image->x_centers->values[ii];
+
+	freeDImage(image);
 
 	// other returned items
 	ts_len_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = n_samples;
@@ -123,8 +123,8 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	SET_VECTOR_ELT(ret_l, 5, cts_img_c); SET_VECTOR_ELT(names_s, 5, mkChar("image"));
 	SET_VECTOR_ELT(ret_l, 6, img_wd_i); SET_VECTOR_ELT(names_s, 6, mkChar("wd"));
 	SET_VECTOR_ELT(ret_l, 7, img_ht_i); SET_VECTOR_ELT(names_s, 7, mkChar("ht"));
-	SET_VECTOR_ELT(ret_l, 8, freq_centers_d); SET_VECTOR_ELT(names_s, 8, mkChar("f.centers"));
-	SET_VECTOR_ELT(ret_l, 9, time_centers_d); SET_VECTOR_ELT(names_s, 9, mkChar("t.centers"));
+	SET_VECTOR_ELT(ret_l, 8, freq_centers_i); SET_VECTOR_ELT(names_s, 8, mkChar("f.centers"));
+	SET_VECTOR_ELT(ret_l, 9, time_centers_i); SET_VECTOR_ELT(names_s, 9, mkChar("t.centers"));
 	SET_VECTOR_ELT(ret_l, 10, by_part_l); SET_VECTOR_ELT(names_s, 10, mkChar("by.partition"));
 	SET_VECTOR_ELT(ret_l, 11, all_freqs_l); SET_VECTOR_ELT(names_s, 11, mkChar("all.freqs"));
 	setAttrib(ret_l, R_NamesSymbol, names_s);

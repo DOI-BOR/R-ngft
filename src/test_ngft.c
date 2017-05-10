@@ -18,9 +18,9 @@ static void print_freq_partitions(FPCOL *fpcol, FILE *ofile) {
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			FPART *partition = fpset->partitions + jj;
 			int fstart = partition->start;
-			fprintf( ofile, "\tpart %2d: start=%3d center=%3d end=%3d width=%3d  ",
+			fprintf( ofile, "\tpart %2d: start=%3d center=%3d end=%3d width=%3d   ",
 							 jj,fstart, partition->center, partition->end, partition->width);
-			fprintf( ofile, "\twin_start=%3d win_end=%3d win_len=%3d\n",
+			fprintf( ofile, "win_start=%3d win_end=%3d win_len=%3d\n",
 							partition->win_start, partition->win_end, partition->win_len);
 		}
 	}
@@ -153,9 +153,9 @@ int main( int argc, char **argv ) {
 		ngft_unpackGftArray(gft, partitions);
 		freeDClist(gft); // also frees space pointed to by data_in
 		cts = ngft_1dComplex64Inv(partitions);
-		fprintf( outfile, "# INV: Re(z)   Im(z)        |z|\n" );
+		fprintf( outfile, "# INV: Re(z)         Im(z)            |z|\n" );
 		for ( ii = 0 ; ii < dcount ; ii++ )
-			fprintf( outfile, "%10.3e %10.3e\t %9.3e\n",
+			fprintf( outfile, "%15.8e %15.8e\t %14.8e\n",
 							cts->values[ii].r, cts->values[ii].i, modulus(cts->values+ii) );
 		freeDClist(cts);
 	} else {
@@ -167,9 +167,9 @@ int main( int argc, char **argv ) {
 		freeDClist(signal); // also frees space pointed to by data_in
 		gft = ngft_makeGftArray(partitions);
 		fprintf( outfile, "%d\n", partitions->N );
-		fprintf( outfile, "# FST: Re(z)   Im(z)        |z|\n" );
+		fprintf( outfile, "# FST: Re(z)         Im(z)            |z|\n" );
 		for ( ii = 0 ; ii < gft->count ; ii++ )
-			fprintf( outfile, "%10.3e %10.3e\t %9.3e\n",
+			fprintf( outfile, "%15.8e %15.8e\t %14.8e\n",
 							gft->values[ii].r, gft->values[ii].i, modulus(gft->values+ii) );
 	}
 
