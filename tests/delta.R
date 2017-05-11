@@ -16,7 +16,7 @@ N <- length(delta)
 df = 1 / (N * dt)
 
 # transform the delta function
-fst.delta <- ngft::fst(delta, dt, by.part=FALSE)
+fst.delta <- ngft::fst(delta, dt, eps=2, by.part=FALSE)
 if ( N < 50 )
   abs(fst.delta$image)
 
@@ -34,7 +34,7 @@ image(x=xvals, y=yvals, z=img.plt,
 
 xvals <- dt * fst.delta$t.centers
 yvals <- df * fst.delta$f.centers
-img.plt <- t(log(abs(fst.delta$image)))
+img.plt <- t(abs(fst.delta$image))
 plot3D::image2D(img.plt, x=xvals, y=yvals, xlab="time, sec.", ylab="frequency, Hz.")
 
 
