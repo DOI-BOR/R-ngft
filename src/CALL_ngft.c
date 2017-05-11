@@ -15,7 +15,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	Rcomplex *ctp;
 	FPCOL *partitions;
 	SEXP ret_l, names_s;
-	SEXP epsilon_d;
+	SEXP deltat_d, epsilon_d;
 	SEXP part_name_s, win_name_s;
 	SEXP gft_c, cts_img_c;
 	SEXP img_wd_i, img_ht_i;
@@ -25,7 +25,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	double *ts = REAL(ts_d);
 	int n_samples = length(ts_d);
 	double dt = ! R_FINITE(asReal(dt_d)) ? .005 : REAL(dt_d)[0];
-	double epsilon = ! R_FINITE(asReal(eps_d)) ? 0 : REAL(dt_d)[0];
+	double epsilon = ! R_FINITE(asReal(eps_d)) ? 0 : REAL(eps_d)[0];
 	FreqPartitionType ptype = asChar(ptype_s) == NA_STRING ? FP_DYADIC :
 			strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "d", 1) == 0 ? FP_DYADIC : /* Dyadic */
 			FP_DYADIC; /* silently ignore anything else, and use Dyadic */
@@ -106,6 +106,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 
 	// other returned items
 	ts_len_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = n_samples;
+	deltat_d = PROTECT(allocVector(REALSXP, 1)); pcnt++; REAL(deltat_d)[0] = dt;
 	epsilon_d = PROTECT(allocVector(REALSXP, 1)); pcnt++; REAL(epsilon_d)[0] = epsilon;
 	part_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(part_name_s, 0, mkChar(ptype == FP_DYADIC ? "Dyadic" : "Unknown"));
@@ -113,20 +114,21 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	SET_STRING_ELT(win_name_s, 0, mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" : "Unknown"));
 
 	/* put the return values into a list */
-	ret_l = PROTECT(allocVector(VECSXP, 12)); pcnt++;
-	names_s = PROTECT(allocVector(VECSXP, 12)); pcnt++;
+	ret_l = PROTECT(allocVector(VECSXP, 13)); pcnt++;
+	names_s = PROTECT(allocVector(VECSXP, 13)); pcnt++;
 	SET_VECTOR_ELT(ret_l, 0, ts_len_i); SET_VECTOR_ELT(names_s, 0, mkChar("ts.len"));
-	SET_VECTOR_ELT(ret_l, 1, epsilon_d); SET_VECTOR_ELT(names_s, 1, mkChar("eps"));
-	SET_VECTOR_ELT(ret_l, 2, part_name_s); SET_VECTOR_ELT(names_s, 2, mkChar("part.type"));
-	SET_VECTOR_ELT(ret_l, 3, win_name_s); SET_VECTOR_ELT(names_s, 3, mkChar("win.type"));
-	SET_VECTOR_ELT(ret_l, 4, gft_c); SET_VECTOR_ELT(names_s, 4, mkChar("gft"));
-	SET_VECTOR_ELT(ret_l, 5, cts_img_c); SET_VECTOR_ELT(names_s, 5, mkChar("image"));
-	SET_VECTOR_ELT(ret_l, 6, img_wd_i); SET_VECTOR_ELT(names_s, 6, mkChar("wd"));
-	SET_VECTOR_ELT(ret_l, 7, img_ht_i); SET_VECTOR_ELT(names_s, 7, mkChar("ht"));
-	SET_VECTOR_ELT(ret_l, 8, freq_centers_i); SET_VECTOR_ELT(names_s, 8, mkChar("f.centers"));
-	SET_VECTOR_ELT(ret_l, 9, time_centers_i); SET_VECTOR_ELT(names_s, 9, mkChar("t.centers"));
-	SET_VECTOR_ELT(ret_l, 10, by_part_l); SET_VECTOR_ELT(names_s, 10, mkChar("by.partition"));
-	SET_VECTOR_ELT(ret_l, 11, all_freqs_l); SET_VECTOR_ELT(names_s, 11, mkChar("all.freqs"));
+	SET_VECTOR_ELT(ret_l, 1, deltat_d); SET_VECTOR_ELT(names_s, 1, mkChar("dt"));
+	SET_VECTOR_ELT(ret_l, 2, epsilon_d); SET_VECTOR_ELT(names_s, 2, mkChar("eps"));
+	SET_VECTOR_ELT(ret_l, 3, part_name_s); SET_VECTOR_ELT(names_s, 3, mkChar("part.type"));
+	SET_VECTOR_ELT(ret_l, 4, win_name_s); SET_VECTOR_ELT(names_s, 4, mkChar("win.type"));
+	SET_VECTOR_ELT(ret_l, 5, gft_c); SET_VECTOR_ELT(names_s, 5, mkChar("gft"));
+	SET_VECTOR_ELT(ret_l, 6, cts_img_c); SET_VECTOR_ELT(names_s, 6, mkChar("image"));
+	SET_VECTOR_ELT(ret_l, 7, img_wd_i); SET_VECTOR_ELT(names_s, 7, mkChar("wd"));
+	SET_VECTOR_ELT(ret_l, 8, img_ht_i); SET_VECTOR_ELT(names_s, 8, mkChar("ht"));
+	SET_VECTOR_ELT(ret_l, 9, freq_centers_i); SET_VECTOR_ELT(names_s, 9, mkChar("f.centers"));
+	SET_VECTOR_ELT(ret_l, 10, time_centers_i); SET_VECTOR_ELT(names_s, 10, mkChar("t.centers"));
+	SET_VECTOR_ELT(ret_l, 11, by_part_l); SET_VECTOR_ELT(names_s, 11, mkChar("by.partition"));
+	SET_VECTOR_ELT(ret_l, 12, all_freqs_l); SET_VECTOR_ELT(names_s, 12, mkChar("all.freqs"));
 	setAttrib(ret_l, R_NamesSymbol, names_s);
 
 	UNPROTECT(pcnt);

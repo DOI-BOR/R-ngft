@@ -61,7 +61,7 @@ typedef DCMPLX *(windowFunction)(int,int);
 #define NEG_F_IND(f,N)	MIN(MAX((N) - ABS(f), (N)/2 + 1), (N) - 1)
 
 // convert an index to a frequency; assumes 0 <= index < N, and -(N+1)/2 < f <= N/2
-#define INDEX_2_FREQ(i,N)	((i)%(N) <= (N)/2 ? (i)%(N) : (i)%(N) - (N))
+#define INDEX_2_FREQ(i,N)	((i) <= (N)/2 ? (i) : (i) - (N))
 #define FREQ_2_INDEX(f,N) ((f) < 0 ? (N) - ABS(f) : (f))
 
 // Macros to test if an integer is even or odd

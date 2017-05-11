@@ -236,12 +236,15 @@ static int start_2_center(int start, int width, BOOL left_bias, BOOL is_f, int N
 	// Note: there is ambiguity in which center to return for the cases where width is even,
 	// and the true center is between the most positive and negative frequencies. However,
 	// that case should not occur in this code. But, bomb if it does
-	if ( IS_EVEN(width) && center == N / 2 + 1 )
+	if ( is_f && IS_EVEN(width) && center == N / 2 + 1 )
 		oops("start_2_center", "application exception: indeterminate center");
 
 	if ( IS_EVEN(width) && shift_left(center, left_bias, is_f, N) )
 		center -= 1;
-	return center % N;
+	center %= N;
+	if ( center < 0 )
+		center += N;
+	return center;
 }
 static int center_2_start(int center, int width, BOOL left_bias, BOOL is_f, int N) {
 	int start = center - width / 2;
@@ -249,7 +252,10 @@ static int center_2_start(int center, int width, BOOL left_bias, BOOL is_f, int 
 	// but taking the +1/2 case allows glossing over it for this code
 	if ( IS_EVEN(width) && shift_left(center, left_bias, is_f, N) )
 		start += 1;
-	return start % N;
+	start %= N;
+	if ( start < 0 )
+		start += N;
+	return start;
 }
 static int center_2_end(int center, int width, BOOL left_bias, BOOL is_f, int N) {
 	int end = center + width / 2;
@@ -257,7 +263,10 @@ static int center_2_end(int center, int width, BOOL left_bias, BOOL is_f, int N)
 	// but taking the +1/2 case allow glossing over it for this code
 	if ( IS_EVEN(width) && ! shift_left(center, left_bias, is_f, N) )
 		end -= 1;
-	return end % N;
+	end %= N;
+	if ( end < 0 )
+		end += N;
+	return end;
 }
 
 
@@ -365,7 +374,7 @@ static void setWindowLimits(FPART *partition, int N, double epsilon) {
 
 	if ( epsilon > 0 ) {
 		BOOL is_f = TRUE;
-		win_len = ROUND((1 + epsilon) * partition->width);
+		win_len = MIN(ROUND((1 + epsilon) * partition->width), N);	// window can't exceed length
 		win_start = center_2_start( partition->center, win_len, left_bias, is_f, N );
 		win_end = center_2_end( partition->center, win_len, left_bias, is_f, N );
 	} else {
@@ -558,8 +567,8 @@ DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionTy
 	if ( N <= 0 )
 		oops( "ngft_FrequencyPartitions", "Invalid argument: N <= 0" );
 
-	// require fractional amount of overlap to be between 0 and 1
-	epsilon = MIN( MAX( epsilon, 0 ), 1 );
+	// require fractional amount of overlap to be between 0 and N - 1
+	epsilon = MIN( MAX( epsilon, 0 ), N - 1 );
 
 	// make the selected type of frequency partition
 	if ( ptype == FP_DYADIC )
@@ -637,8 +646,19 @@ static DCMPLX *getWindowDFT(int fcenter, int width, int N, windowFunction *windo
 		win = calloc( N, sizeof( *win ) );
 		win[0].r = 1;
 	} else { // width > 1
-		// get DFT of time-domain window of length N, centered on freq=0
-		win = window_fn(N, fcenter);
+		if ( fcenter == 0 ) {
+			// sigma-t is infinite in this case, so the Gaussian is ill-defined. Need a boxcar from
+			// start to end, with a height of 1/width
+			int ii;
+			win = calloc( N, sizeof( *win ) );
+			// rather than re-creating the window, or passing the window arguments, just set all N elements
+			// to 1/width, and let the calling function grab 'width' of them from wherever it wants.  
+			for ( ii = 0 ; ii < N ; ii++ )
+				win[ii].r = 1. / width;
+		} else {
+			// get DFT of time-domain window of length N, centered on freq=0
+			win = window_fn(N, fcenter);
+		}
 	}
 
 	// right-shift DFT of window so that original 0-frequency is moved to fcenter (positive or negative)
