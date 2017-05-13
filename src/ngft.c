@@ -712,8 +712,8 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 			dst = calloc( win_len, sizeof( *dst ) );
 			for ( kk = 0 ; kk < win_len ; kk++ ) {
 				int f_idx = (win_start + kk) % N; // get frequency index, handling wrap-around
-				dst[kk] = signal[f_idx];
-				cmul( dst + kk, win + f_idx );
+				dst[kk] = signal[f_idx];	// copy and shift the signal FFT (0-index is at the window start)
+				cmul( dst + kk, win + f_idx );	// apply the window
 			}
 			free( win );	// done with window
 
