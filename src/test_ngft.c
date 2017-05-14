@@ -91,6 +91,10 @@ int main( int argc, char **argv ) {
 					epsilon = atof(*++argv);
 					argc--;
 					break;
+				case 'p':	// partition type: 1 - dyadic, 2 - EDO, 3 - fixed width
+					ptype = atoi(*++argv);
+					argc--;
+					break;
 				case 'o':
 					outfile = fopen( *++argv, "w" );
 					argc--;
@@ -143,22 +147,7 @@ int main( int argc, char **argv ) {
 	/* initialize */
 
 	// Call 1D GFT Function
-	if ( do_inverse ) {
-		DCLIST *gft, *cts;
-		// create partitions
-		partitions = ngft_FrequencyPartitions(ts_len, epsilon, ptype, wtype);
-		gft = calloc(1, sizeof(*gft));
-		gft->count = dcount;
-		gft->values = data_in;
-		ngft_unpackGftArray(gft, partitions);
-		freeDClist(gft); // also frees space pointed to by data_in
-		cts = ngft_1dComplex64Inv(partitions);
-		fprintf( outfile, "# INV: Re(z)         Im(z)            |z|\n" );
-		for ( ii = 0 ; ii < dcount ; ii++ )
-			fprintf( outfile, "%15.8e %15.8e\t %14.8e\n",
-							cts->values[ii].r, cts->values[ii].i, modulus(cts->values+ii) );
-		freeDClist(cts);
-	} else {
+	if ( ! do_inverse ) {
 		DCLIST *gft;
 		DCLIST *signal = calloc(1, sizeof(*signal));
 		signal->count = dcount;
@@ -171,6 +160,21 @@ int main( int argc, char **argv ) {
 		for ( ii = 0 ; ii < gft->count ; ii++ )
 			fprintf( outfile, "%15.8e %15.8e\t %14.8e\n",
 							gft->values[ii].r, gft->values[ii].i, modulus(gft->values+ii) );
+	} else {
+		DCLIST *gft, *cts;
+		// create partitions
+		partitions = ngft_FrequencyPartitions(ts_len, epsilon, ptype, wtype);
+		gft = calloc(1, sizeof(*gft));
+		gft->count = dcount;
+		gft->values = data_in;
+		ngft_unpackGftArray(gft, partitions);
+		freeDClist(gft); // also frees space pointed to by data_in
+		cts = ngft_1dComplex64Inv(partitions);
+		fprintf( outfile, "# INV: Re(z)         Im(z)            |z|\n" );
+		for ( ii = 0 ; ii < cts->count ; ii++ )
+			fprintf( outfile, "%15.8e %15.8e\t %14.8e\n",
+							cts->values[ii].r, cts->values[ii].i, modulus(cts->values+ii) );
+		freeDClist(cts);
 	}
 
 	if ( do_image ) {
@@ -178,18 +182,18 @@ int main( int argc, char **argv ) {
 		DIMAGE *image = ngft_1d_InterpolateNN(partitions, image_dim, by_part, all_freqs);
 
 		// print the image
-		fprintf( outfile, "\n%s%s:\n", "Image",  all_freqs ? " (all frequencies)" : " (non-negative frequencies)");
+		fprintf( outfile, "\n%s%s:\n", "Image",  all_freqs ? "   (all frequencies)" : " (non-negative frequencies)");
 		fprintf( outfile, "  f\\t" );
 		for ( ii = 0 ; ii < image->x_centers->count ; ii++ )
 			fprintf( outfile, " %8d", image->x_centers->values[ii]);
-		fprintf( outfile, "\n---- " );
+		fprintf( outfile, "\n------ " );
 		for ( ii = 0 ; ii < image->x_centers->count ; ii++ )
 			fprintf( outfile, " --------");
 		fprintf( outfile, "\n" );
 		for ( ii = 0 ; ii < image->y_centers->count ; ii++ ) {
 			int jj;
 			char *fmt = " %8.1e";
-			fprintf( outfile, "%3d: ", image->y_centers->values[ii]);
+			fprintf( outfile, "%5d: ", image->y_centers->values[ii]);
 			for ( jj = 0 ; jj < image->x_centers->count ; jj++ )
 				fprintf( outfile, fmt, modulus( image->img->values + ii * image->x_centers->count + jj ) );
 			fprintf( outfile, "\n" );

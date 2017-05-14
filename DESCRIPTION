@@ -1,7 +1,7 @@
 Package: ngft
 Type: Package
 Title: Stockwell or S-Transform (General Fourier-family Transform)
-Version: 0.3.2
+Version: 0.3.3
 Date: 2017-05-11
 Author: Chris Wood
 Maintainer: Chris Wood <cwood@usbr.gov>

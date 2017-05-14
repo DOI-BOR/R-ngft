@@ -16,7 +16,7 @@ N <- length(delta)
 df = 1 / (N * dt)
 
 # transform the delta function
-fst.delta <- ngft::fst(delta, dt, eps=2, by.part=FALSE)
+fst.delta <- ngft::fst(delta, dt, eps=15, part.type="e", by.part=FALSE)
 if ( N < 50 )
   abs(fst.delta$image)
 

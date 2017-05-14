@@ -7,8 +7,8 @@
 #' @param dt Sample interval, in seconds. Default is 0.01.
 #' @param eps Fractional window overlap, dimensionless. Default is 0.0.
 #' @param part.type \describe{
-#' \item{Dyadic}{\code{c("dy","dyadic")}}
-#' \item{Equal Temperament}{\code{c("eq","et")}}
+#' \item{Dyadic}{\code{c("dy","Dyadic", "d")}}
+#' \item{Equal Division of the Octave}{\code{c("eq","EDO", "e")}}
 #' }
 #' Characters are case-insensitive, and only need to uniquely
 #' define the option. Default is \code{Dyadic}.

@@ -113,7 +113,7 @@ typedef struct {
 } FPSET;
 
 // enum defining partitioning types
-typedef enum { FP_UNKNOWN = 0, FP_DYADIC, FP_ET } FreqPartitionType;
+typedef enum { FP_UNKNOWN = 0, FP_DYADIC, FP_EDO } FreqPartitionType;
 // enum defining window types
 typedef enum { FWT_UNKNOWN = 0, FWT_GAUSSIAN, FWT_BOX } FreqWindowType;
 

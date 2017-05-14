@@ -390,12 +390,15 @@ static void setWindowLimits(FPART *partition, int N, double epsilon) {
 }
 
 
-// for a specified starting frequency fs (non-negative or negative) of a dyadic
-// partitioning, define the start, center, and end indices into the N frequencies,
+// for specified starting and ending frequencies fs and fe (both non-negative or negative)
+// of a partitioning, define the start, center, and end indices into the N frequencies,
 // and allocate a new partition structure to store them
-static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N, double epsilon) {
+static void add_freq_partition(FPART **ppart, int *pcount, int fs, int fe, int N, double epsilon) {
 	FPART *p;
 	int start, center, end, width;
+
+	if ( fs * fe <= 0 && fs != fe )
+		oops("add_partition", "argument exception: non-zero fs and fe must have the same sign, or both be zero");
 
 	// add space for another partition
 	*ppart = realloc(*ppart, ++(*pcount) * sizeof(**ppart));
@@ -403,11 +406,23 @@ static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N, doub
 
 	if ( fs >= 0 ) {
 		// handle non-negative frequencies
+		// check that fs < fe, and silently fix if not
+		if ( fs > fe ) {
+			int tmp = fe;
+			fe = fs;
+			fs = tmp;
+		}
 		start = NONNEG_F_IND(fs, N);
-		end = NONNEG_F_IND(2 * fs - 1, N);
+		end = NONNEG_F_IND(fe, N);
 	} else {
 		// handle negative frequencies
-		start = NEG_F_IND(2 * fs + 1, N);	// reverse start and end indices for negative
+		// check that fs > fe, and silently fix if not
+		if ( fs < fe ) {
+			int tmp = fe;
+			fe = fs;
+			fs = tmp;
+		}
+		start = NEG_F_IND(fe, N);	// reverse start and end indices for negative
 		end = NEG_F_IND(fs, N);	// frequencies so that start < end for array ops
 	}
 	width = end - start + 1;
@@ -432,12 +447,19 @@ static void add_dyadic_partition(FPART **ppart, int *pcount, int fs, int N, doub
 }
 
 
+// frequency-partition comparator for sorting on increasing start frequency.
+static int part_cmp(const void* vp1, const void* vp2) {
+	const FPART *p1 = vp1, *p2 = vp2;
+	return p1->start - p2->start;
+}
+
+
 // Dyadic partitioning of a DFT frequency array of length N, where N can be odd or even,
 //	and does not need to be a power of 2. The partitioning will span the array, with
 //	no overlap in partitions.
 static FPCOL *dyadicPartitions(int N, double epsilon) {
 	int fs, pcount, n_pcount;
-	FPART *partitions, *n_partitions, *tmp;
+	FPART *partitions, *n_partitions;
 	FPCOL *partition_collection;
 
 	if ( N <= 0 )
@@ -448,24 +470,21 @@ static FPCOL *dyadicPartitions(int N, double epsilon) {
 	n_partitions = NULL, n_pcount = 0; // negative frequency partitions
 
 	// handle 0-frequency as a special case
-	fs = 0, add_dyadic_partition( &partitions, &pcount, fs, N, epsilon );
+	add_freq_partition( &partitions, &pcount, 0, 0, N, epsilon );
 
 	// loop over powers of 2 in (positive) frequency, from 1 to Nyquist,
 	// to make dyadic partitions for positive and negative frequencies
 	for ( fs = 1 ; fs <= N / 2 ; fs *= 2 ) {
 		// add positive frequencies
-		add_dyadic_partition( &partitions, &pcount, fs, N, epsilon );
+		add_freq_partition( &partitions, &pcount, fs, 2 * fs - 1, N, epsilon );
 		// add negative frequencies (except for Nyquist, unless N is odd)
 		if ( fs < N/2 || IS_ODD(N) )
-			add_dyadic_partition( &n_partitions, &n_pcount, -fs, N, epsilon );
+			add_freq_partition( &n_partitions, &n_pcount, -fs, -2 * fs + 1, N, epsilon );
 	}
 
-	// reverse the order of the negative partitions to be consistent with normal frequency ordering
-	tmp = calloc( n_pcount, sizeof( *tmp ) );
-	for ( fs = n_pcount ; fs > 0 ; fs-- )
-		memcpy(tmp + n_pcount - fs, n_partitions + fs - 1, sizeof( *n_partitions ));
-	memcpy( n_partitions, tmp, n_pcount * sizeof( *tmp ) );
-	free( tmp );
+	// sort the negative partitions by decreasing frequency to be
+	// consistent with normal frequency ordering
+	qsort(n_partitions, n_pcount, sizeof(*n_partitions), part_cmp);
 
 	// put results into a partition collection, and return a pointer to it
 	partition_collection = calloc(1, sizeof(*partition_collection));
@@ -480,87 +499,98 @@ static FPCOL *dyadicPartitions(int N, double epsilon) {
 }
 
 
-// TODO: generalize to n-semitone equal temperament, with optional reference
-// Partitioning along the lines of a 12-tone scale (12 log divisions per doubling),
-// mostly following the original GFT code.
-//	cents * 100 is the desired logFrequency increment, in units of semitones
-//	samplerate is the sampling rate, in Hz. For audio, this should be above 2000 Hz, and
-//		if it is, then the lower-frequency reference will be about 2 octaves below 440 Hz.
-// This function compiles, but has not been tested by me (CWood)
-static FPCOL *musicPartitions(int N, double samplerate, int cents) {
-	int ii, ii_max, pcount, n_pcount;
-	FPART *p, *partitions, *np, *n_partitions, *tmp;
-	FPCOL *partition_set;
+// Equal division of the octave (EDO) partitioning: Define a reference octave frequency,
+// and subdivide the frequency range into octaves such that one of them is equal to the
+// the reference octave. Next, subdivide the octaves into T equal log-intervals. Also known
+// as equal temperament. Returns the discrete frequencies best approximating the computed
+// continuous frequencies. Each of the N discrete frequencies will belong to exactly one partition.
+// If epsilon > 0, then partition windows also will be defined, where the amount of window
+// overlap is specified by epsilon.  This is defined by:
+//		window_width / partition_width = 1 + epsilon
+// The underlying partitions remain unchanged, and never overlap, regardless of epsilon.
+// Note: f_ref and T can be set <= 0 to use default values
+static FPCOL *edoPartitions(int N, double epsilon, int f_ref, int T) {
+	int fs_prev, fe_prev, pcount, n_pcount;
+	double f_ratio, ff_prev;
+	FPART *partitions, *n_partitions;
+	FPCOL *partition_collection;
 
-	double fSpacing;
-	double reference = 440. / (2 * 2); // make reference 2 octaves below 440 Hz
-	double logcent = 1. / (12 * 100);	// assume a 12-tone scale
-	double logdelta, minlog2f, maxlog2f;
+	// complain about invalid arguments we can't fix
+	if ( N < 1  )
+		oops( "edoPartitions", "Invalid argument: must have N > 0" );
 
-	if ( N <= 0 )
-		oops( "musicPartitions", "Invalid argument: N <= 0" );
+	if ( f_ref <= 0 ) // set reference frequency to default value, if not provided
+		f_ref = N / 2;
+	if ( f_ref > N / 2 )	// sanity check
+		f_ref = N / 2;
 
-	logdelta = logcent * cents;
-	if ( samplerate < 2000 ) {
-		// adjust reference for rates that appear to be well below the human audio band
-		reference = samplerate / 100;
+	if ( T <= 0 ) // set T to default value, if not provided
+		T = 5;
+	if ( T > N / 4 )	// sanity check
+		T = N / 4;
+
+	f_ratio = pow(2, 1 / (double)T);	// frequency ratio between successive continuous frequencies
+
+	// initialize
+	partitions = NULL, pcount = 0;	// non-negative frequency partitions
+	n_partitions = NULL, n_pcount = 0; // negative frequency partitions
+
+	// get partitions with frequencies less than or equal to the reference
+	ff_prev = f_ref;
+	fs_prev = f_ref + 1;
+	do {
+		int fe = fs_prev - 1;
+		double ff = ff_prev / f_ratio;
+		int fs = ROUND(ff);
+		ff_prev = ff;
+		if ( fs > fe )
+			continue;
+		fs_prev = fs;
+		// add positive frequencies
+		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon);
+		// add negative frequencies (except for Nyquist - unless N is odd - or 0)
+		if ( fs > 0 && ( fs < N / 2  || IS_ODD(N) ) )
+			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon);
+	} while ( fs_prev > 0 );
+
+	// get partitions with frequencies greater than the reference
+	ff_prev = f_ref;
+	fe_prev = f_ref;
+	while ( fe_prev < N / 2 ) {
+		int fs = fe_prev + 1;
+		double ff = ff_prev * f_ratio;
+		int fe = ROUND(ff);
+		ff_prev = ff;
+		if ( fe < fs )
+			continue;
+		fe_prev = fe;
+		// add positive frequencies
+		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon);
+		// add negative frequencies (except for Nyquist, unless N is odd)
+		if ( fs < N / 2 || IS_ODD(N) )
+			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon);
 	}
-	minlog2f = log2(reference) - logdelta * floor(log2(reference) / logdelta);
-	maxlog2f = log2(0.5 * samplerate);	// Nyquist
-	fSpacing = samplerate / N;
-	while ( pow(2, minlog2f + logdelta) - pow(2, minlog2f) < fSpacing )
-		minlog2f += logdelta;
 
-	ii_max = (int)(floor((maxlog2f - minlog2f) / logdelta)) + 1;
-	for ( partitions = NULL, n_partitions = NULL, pcount = 0, n_pcount = 0, ii = 0 ; ii < ii_max ; ii++ ) {
-		double log2f;
-		int fs, fe;
-		// handle non-negative frequencies
-		partitions = realloc(partitions, ++pcount * sizeof(*partitions));
-		p = partitions + pcount - 1;
-		log2f = minlog2f - 0.5 * logdelta + ii * logdelta;
-		fs = ROUND( pow( 2, log2f ) / fSpacing );
-		log2f = minlog2f - 0.5 * logdelta + (ii + 1) * logdelta;
-		fe = ROUND( pow( 2, log2f ) / fSpacing ) - 1;
-		p->start = NONNEG_F_IND(fs, N);
-		p->end = NONNEG_F_IND(fe, N);
-		p->width = p->end - p->start + 1;
-		p->center = NONNEG_F_IND(p->start + p->width / 2, N);
-		p->win_len = 0;
-		if ( fs > 0 ) {
-			// handle negative frequencies
-			n_partitions = realloc(n_partitions, ++n_pcount * sizeof(*n_partitions));
-			np = n_partitions + n_pcount - 1;
-			np->start = NEG_F_IND(-p->start, N);
-			np->end = NEG_F_IND(-p->end, N);
-			np->width = np->start - np->end + 1;	// np->width <= p->width
-			np->center = NEG_F_IND(p->start + np->width / 2, N);
-			np->win_len = 0;
-		}
-	}
+	// sort the partitions to be consistent with normal frequency ordering
+	qsort(partitions, pcount, sizeof(*partitions), part_cmp);
+	qsort(n_partitions, n_pcount, sizeof(*n_partitions), part_cmp);
 
-	// reverse the order of the negative partitions to be consistent with normal frequency ordering
-	tmp = calloc( n_pcount, sizeof( *tmp ) );
-	for ( ii = n_pcount ; ii > 0 ; ii-- )
-		memcpy(tmp + n_pcount - ii, n_partitions + ii - 1, sizeof( *n_partitions ));
-	memcpy( n_partitions, tmp, n_pcount * sizeof( *tmp ) );
-	free( tmp );
+	// put results into a partition collection, and return a pointer to it
+	partition_collection = calloc(1, sizeof(*partition_collection));
+	partition_collection->N = N;
+	partition_collection->fpset[0].partitions = partitions;
+	partition_collection->fpset[0].pcount = pcount;
+	partition_collection->fpset[1].partitions = n_partitions;
+	partition_collection->fpset[1].pcount = n_pcount;
+	partition_collection->partition_type = FP_EDO;
 
-	partition_set = calloc(1, sizeof(*partition_set));
-	partition_set->N = N;
-	partition_set->fpset[0].partitions = partitions;
-	partition_set->fpset[0].pcount = pcount;
-	partition_set->fpset[1].partitions = n_partitions;
-	partition_set->fpset[1].pcount = n_pcount;
-	partition_set->partition_type = FP_ET;
-
-	return partition_set;
+	return partition_collection;
 }
 
 
 // create frequency partitions
 DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionType ptype, FreqWindowType wtype) {
-	int ii;
+	int ii, f_ref = -1, T = -1;
 	TPCOL *tpcol;
 	FPCOL *pars;
 
@@ -573,6 +603,8 @@ DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionTy
 	// make the selected type of frequency partition
 	if ( ptype == FP_DYADIC )
 		pars = dyadicPartitions(N, epsilon);
+	else if ( ptype == FP_EDO )
+		pars = edoPartitions(N, epsilon, f_ref, T);
 	else
 		oops("ngft_FrequencyPartitions", "Invalid argument: unknown partition type");
 
