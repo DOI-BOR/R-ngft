@@ -29,6 +29,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	FreqPartitionType ptype = asChar(ptype_s) == NA_STRING ? FP_DYADIC :
 			strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "d", 1) == 0 ? FP_DYADIC : /* Dyadic */
 			strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "e", 1) == 0 ? FP_EDO : /* Equal division of the octave */
+			strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "f", 1) == 0 ? FP_FW : /* Fixed width */
 			FP_DYADIC; /* silently ignore anything else, and use Dyadic */
 	FreqWindowType wtype = asChar(wtype_s) == NA_STRING ? FWT_GAUSSIAN :
 			strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "g", 1) == 0 ? FWT_GAUSSIAN : /* Gaussian */
@@ -110,7 +111,10 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	deltat_d = PROTECT(allocVector(REALSXP, 1)); pcnt++; REAL(deltat_d)[0] = dt;
 	epsilon_d = PROTECT(allocVector(REALSXP, 1)); pcnt++; REAL(epsilon_d)[0] = epsilon;
 	part_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
-	SET_STRING_ELT(part_name_s, 0, mkChar(ptype == FP_DYADIC ? "Dyadic" : ptype == FP_EDO ? "EDO" : "Unknown"));
+	SET_STRING_ELT(part_name_s, 0,
+								 mkChar(ptype == FP_DYADIC ? "Dyadic" :
+												ptype == FP_EDO ? "EDO" : 
+												ptype == FP_FW ? "Fixed" :"Unknown"));
 	win_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(win_name_s, 0, mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" : "Unknown"));
 

@@ -24,6 +24,7 @@ define the option. Default is \code{Gaussian}.}
 \item{part.type}{\describe{
 \item{Dyadic}{\code{c("dy","Dyadic", "d")}}
 \item{Equal Division of the Octave}{\code{c("eq","EDO", "e")}}
+\item{Fixed Width}{\code{c("fw","Fixed", "f")}}
 }
 Characters are case-insensitive, and only need to uniquely
 define the option. Default is \code{Dyadic}.}

@@ -588,9 +588,64 @@ static FPCOL *edoPartitions(int N, double epsilon, int f_ref, int T) {
 }
 
 
+// Fixed width partitioning
+// The underlying partitions remain unchanged, and never overlap, regardless of epsilon.
+// Note: f_ref and T can be set <= 0 to use default values
+static FPCOL *fwPartitions(int N, double epsilon, int W) {
+	int fe_prev, pcount, n_pcount;
+	FPART *partitions, *n_partitions;
+	FPCOL *partition_collection;
+
+	// complain about invalid arguments we can't fix
+	if ( N < 1  )
+		oops( "fwPartitions", "Invalid argument: must have N > 0" );
+
+	if ( W <= 0 ) // set W to default value, if not provided
+		W = 10;
+	if ( W > N / 4 )	// sanity check
+		W = N / 4;
+
+	// initialize
+	partitions = NULL, pcount = 0;	// non-negative frequency partitions
+	n_partitions = NULL, n_pcount = 0; // negative frequency partitions
+
+	// handle 0-frequency as a special case
+	add_freq_partition( &partitions, &pcount, 0, 0, N, epsilon );
+
+	// get fixed-width partitions starting from frequency = 1
+	fe_prev = 0;
+	do {
+		int fs = fe_prev + 1;
+		int fe = fs + W - 1;
+		if ( fs > N / 2 )
+			fe = N / 2;
+		fe_prev = fe;
+		// add positive frequencies
+		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon);
+		// add negative frequencies (except for Nyquist - unless N is odd)
+		if ( fs < N / 2  || IS_ODD(N) )
+			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon);
+	} while ( fe_prev < N / 2 );
+
+	// sort the partitions to be consistent with normal frequency ordering
+	qsort(n_partitions, n_pcount, sizeof(*n_partitions), part_cmp);
+
+	// put results into a partition collection, and return a pointer to it
+	partition_collection = calloc(1, sizeof(*partition_collection));
+	partition_collection->N = N;
+	partition_collection->fpset[0].partitions = partitions;
+	partition_collection->fpset[0].pcount = pcount;
+	partition_collection->fpset[1].partitions = n_partitions;
+	partition_collection->fpset[1].pcount = n_pcount;
+	partition_collection->partition_type = FP_FW;
+
+	return partition_collection;
+}
+
+
 // create frequency partitions
 DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionType ptype, FreqWindowType wtype) {
-	int ii, f_ref = -1, T = -1;
+	int ii, f_ref = -1, T = -1, W = -1;
 	TPCOL *tpcol;
 	FPCOL *pars;
 
@@ -605,6 +660,8 @@ DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionTy
 		pars = dyadicPartitions(N, epsilon);
 	else if ( ptype == FP_EDO )
 		pars = edoPartitions(N, epsilon, f_ref, T);
+	else if ( ptype == FP_FW )
+		pars = fwPartitions(N, epsilon, W);
 	else
 		oops("ngft_FrequencyPartitions", "Invalid argument: unknown partition type");
 
