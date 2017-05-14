@@ -33,6 +33,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 			FP_DYADIC; /* silently ignore anything else, and use Dyadic */
 	FreqWindowType wtype = asChar(wtype_s) == NA_STRING ? FWT_GAUSSIAN :
 			strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "g", 1) == 0 ? FWT_GAUSSIAN : /* Gaussian */
+			strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "b", 1) == 0 ? FWT_BOX : /* Box */
 			FWT_GAUSSIAN; /* silently ignore anything else, and use Gaussian */
 	int image_dim = asInteger(image_dim_i) == NA_INTEGER ? -1 : INTEGER(image_dim_i)[0];
 	BOOL by_part = asLogical( by_part_l ) == NA_LOGICAL ? TRUE : LOGICAL( by_part_l )[0];
@@ -116,7 +117,9 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 												ptype == FP_EDO ? "EDO" : 
 												ptype == FP_FW ? "Fixed" :"Unknown"));
 	win_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
-	SET_STRING_ELT(win_name_s, 0, mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" : "Unknown"));
+	SET_STRING_ELT(win_name_s, 0,
+								 mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" :
+												wtype == FWT_BOX ? "Box" : "Unknown"));
 
 	/* put the return values into a list */
 	ret_l = PROTECT(allocVector(VECSXP, 13)); pcnt++;

@@ -166,6 +166,7 @@ static DCMPLX *gaussian_dft(int N, int freq) {
 	for ( ii = 0; ii < N ; ii++ )
 		win[ii].r /= win_sum;
 
+#define NGFT_VERBOSE_DEBUG
 #ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "Gaussian Window: N=%2d freq=%2d, gamma=%.3f, x_max=%.3f, win_sum=%.3f\n", N, freq, x_max/0.5, x_max, win_sum );
 	for ( ii = 0 ; ii < N ; ii++ )
@@ -195,7 +196,9 @@ static DCMPLX *gaussian_dft(int N, int freq) {
 	// which introduces a phase shift, so the imaginary parts of the DFT aren't zero.
 
 #ifdef NGFT_VERBOSE_DEBUG
-	fprintf( stderr, "FFT: freq=%2d\n", freq );
+	for ( win_sum = 0, ii = 0 ; ii < N ; ii++ )
+		win_sum += modulus(win + ii);
+	fprintf( stderr, "FFT: freq=%2d, win_sum=%.3f\n", freq, win_sum );
 	for ( ii = 0 ; ii < N ; ii++ )
 		fprintf( stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus( win + ii ) );
 	fflush( stderr );
@@ -206,15 +209,44 @@ static DCMPLX *gaussian_dft(int N, int freq) {
 
 
 // return the FT of a time-domain sinc windowing function
-// TODO: include phase shift for even N; include option
-// for a window-length < N (e.g., sigma-t = 1/|f|)
 static DCMPLX *box_dft(int N, int freq) {
-	int ii;
+	int ii, lshift, abs_freq = ABS(freq);
 	DCMPLX *win = calloc(N, sizeof( *win ));
-	for ( ii = 0 ; ii < N ; ii++ ) {
-		win[ii].r = 1.;
-		win[ii].i = 0.0;
+
+	for ( ii = 0 ; ii < N ; ii++ )
+		win[ii].r = ii < abs_freq ? 1 : 0; // (TODO: should this be normalized to 1/abs_freq?)
+
+	lshift = abs_freq / 2 + (IS_EVEN(abs_freq) && left_bias ? -1 : 0);
+	shift(win, N, -lshift);
+
+	if ( IS_EVEN(abs_freq) ) {
+		// Note: If abs_freq is odd, then index 0 of the time-domain sinc function will be exactly
+		// at time 0. If abs_freq is even, however, then time 0 is shifted by 1/2 of a sample period
+		// from index 0, which introduces a phase shift, so the imaginary parts of the DFT
+		// aren't zero. We need to add that phase shift here.
+		double fscale = M_PI / N;
+		for ( ii = 1 ; ii <= abs_freq / 2 ; ii++ ) {
+			DCMPLX ps = {cos(ii * fscale), (left_bias ? -1 : 1) * sin(ii * fscale)};
+			if ( ii < abs_freq / 2 || left_bias )
+				cmul(win + ii, &ps);
+			if ( ii < abs_freq / 2 || ! left_bias ) {
+				ps.i = -ps.i;	// need complex conjugate for corresponding negative frequency
+				cmul(win + N - ii, &ps);
+			}
+		}
 	}
+
+#ifdef NGFT_VERBOSE_DEBUG
+	{
+		double win_sum = 0;
+		for ( ii = 0 ; ii < N ; ii++ )
+			win_sum += modulus(win + ii);
+		fprintf(stderr, "FFT: freq=%2d, win_sum=%.3f\n", freq, win_sum);
+		for ( ii = 0 ; ii < N ; ii++ )
+			fprintf(stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus(win + ii));
+		fflush(stderr);
+	}
+#endif
 
 	return(win);
 }
@@ -737,20 +769,20 @@ static DCMPLX *getWindowDFT(int fcenter, int width, int N, windowFunction *windo
 	} else { // width > 1
 		if ( fcenter == 0 ) {
 			// sigma-t is infinite in this case, so the Gaussian is ill-defined. Need a boxcar from
-			// start to end, with a height of 1/width
+			// start to end, with a height of 1 (TODO: should this be normalized to 1/width?)
 			int ii;
 			win = calloc( N, sizeof( *win ) );
 			// rather than re-creating the window, or passing the window arguments, just set all N elements
-			// to 1/width, and let the calling function grab 'width' of them from wherever it wants.  
+			// to 1, and let the calling function grab 'width' of them from wherever it wants.  
 			for ( ii = 0 ; ii < N ; ii++ )
-				win[ii].r = 1. / width;
+				win[ii].r = 1.;
 		} else {
 			// get DFT of time-domain window of length N, centered on freq=0
 			win = window_fn(N, fcenter);
 		}
 	}
 
-	// right-shift DFT of window so that original 0-frequency is moved to fcenter (positive or negative)
+	// right-shift DFT of window so that original 0-frequency index is moved to fcenter (positive or negative)
 	shift(win, N, FREQ_2_INDEX(fcenter,N));
 
 	return win; // length is N
@@ -773,6 +805,8 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 
 	if ( fpcol->window_type == FWT_GAUSSIAN )
 		window_fn = gaussian_dft;
+	else if ( fpcol->window_type == FWT_BOX )
+		window_fn = box_dft;
 	else
 		oops("ngft_1dComplex64", "Invalid argument: unknown frequency-window type");
 
@@ -897,6 +931,8 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 
 	if ( fpcol->window_type == FWT_GAUSSIAN )
 		window_fn = gaussian_dft;
+	else if ( fpcol->window_type == FWT_BOX )
+		window_fn = box_dft;
 	else
 		oops("ngft_1dComplex64Inv", "Invalid argument: unknown frequency-window type");
 

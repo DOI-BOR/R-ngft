@@ -95,6 +95,10 @@ int main( int argc, char **argv ) {
 					ptype = atoi(*++argv);
 					argc--;
 					break;
+				case 'w':	// window type: 1 - Gaussian, 2 - Box
+					wtype = atoi(*++argv);
+					argc--;
+					break;
 				case 'o':
 					outfile = fopen( *++argv, "w" );
 					argc--;
