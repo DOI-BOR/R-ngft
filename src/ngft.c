@@ -28,7 +28,7 @@
 
 // For odd width partitions, the center point is unambiguous. For even width, the center point
 // can be at the end of the left half (left_bias=T), or the start of the right half (left_bias=F).
-BOOL left_bias = FALSE;
+BOOL left_bias = TRUE;
 
 
 // fftw wrapper from original GFT library
@@ -166,7 +166,6 @@ static DCMPLX *gaussian_dft(int N, int freq) {
 	for ( ii = 0; ii < N ; ii++ )
 		win[ii].r /= win_sum;
 
-#define NGFT_VERBOSE_DEBUG
 #ifdef NGFT_VERBOSE_DEBUG
 	fprintf( stderr, "Gaussian Window: N=%2d freq=%2d, gamma=%.3f, x_max=%.3f, win_sum=%.3f\n", N, freq, x_max/0.5, x_max, win_sum );
 	for ( ii = 0 ; ii < N ; ii++ )
@@ -208,28 +207,33 @@ static DCMPLX *gaussian_dft(int N, int freq) {
 }
 
 
-// return the FT of a time-domain sinc windowing function
+// return the FT of a time-domain sinc windowing function of
+// width N. 
 static DCMPLX *box_dft(int N, int freq) {
-	int ii, lshift, abs_freq = ABS(freq);
+	int ii, lshift, abs_freq = ABS(freq);	// window width is abs_freq if epsilon=0; otherwise, it's wider
 	DCMPLX *win = calloc(N, sizeof( *win ));
 
+	// rather than re-creating the window, which will be wider than
+	// abs_freq if epsilon > 0, just set all elements to 1 and
+	// let the calling function select the elements it wants.
 	for ( ii = 0 ; ii < N ; ii++ )
-		win[ii].r = ii < abs_freq ? 1 : 0; // (TODO: should this be normalized to 1/abs_freq?)
+		win[ii].r = 1; // elements outside window are actually 0, but we can set everything to 1 here
 
+	// this isn't needed if we're not setting the width of the boxcar here
 	lshift = abs_freq / 2 + (IS_EVEN(abs_freq) && left_bias ? -1 : 0);
 	shift(win, N, -lshift);
 
-	if ( IS_EVEN(abs_freq) ) {
-		// Note: If abs_freq is odd, then index 0 of the time-domain sinc function will be exactly
-		// at time 0. If abs_freq is even, however, then time 0 is shifted by 1/2 of a sample period
+	if ( IS_EVEN(N) ) {
+		// Note: If N is odd, then index 0 of the time-domain sinc function will be exactly
+		// at time 0. If N is even, however, then time 0 is shifted by 1/2 of a sample period
 		// from index 0, which introduces a phase shift, so the imaginary parts of the DFT
-		// aren't zero. We need to add that phase shift here.
+		// aren't zero. That phase shift is applied here.
 		double fscale = M_PI / N;
-		for ( ii = 1 ; ii <= abs_freq / 2 ; ii++ ) {
+		for ( ii = 1 ; ii <= N / 2 ; ii++ ) {
 			DCMPLX ps = {cos(ii * fscale), (left_bias ? -1 : 1) * sin(ii * fscale)};
-			if ( ii < abs_freq / 2 || left_bias )
+			if ( ii < N / 2 || left_bias )
 				cmul(win + ii, &ps);
-			if ( ii < abs_freq / 2 || ! left_bias ) {
+			if ( ii < N / 2 || ! left_bias ) {
 				ps.i = -ps.i;	// need complex conjugate for corresponding negative frequency
 				cmul(win + N - ii, &ps);
 			}
