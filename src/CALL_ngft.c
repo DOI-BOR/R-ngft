@@ -6,7 +6,8 @@
 #include <Rinternals.h>
 
 DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype_s, SEXP wtype_s,
-																		SEXP image_dim_i, SEXP by_part_l, SEXP all_freqs_l)
+																		SEXP image_dim_i, SEXP by_part_l, SEXP all_freqs_l,
+																		SEXP fw_width_i, SEXP edo_f_ref_i, SEXP edo_ndiv_i)
 {
 	int ii, jj, pcnt = 0, nf, nt, *ip;
 	DCMPLX *cts;
@@ -21,6 +22,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	SEXP img_wd_i, img_ht_i;
 	SEXP freq_centers_i, time_centers_i;
 	SEXP ts_len_i;
+	SEXP fw_w_i, edo_fref_i, edo_nd_i;
 
 	double *ts = REAL(ts_d);
 	int n_samples = length(ts_d);
@@ -38,6 +40,9 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	int image_dim = asInteger(image_dim_i) == NA_INTEGER ? -1 : INTEGER(image_dim_i)[0];
 	BOOL by_part = asLogical( by_part_l ) == NA_LOGICAL ? TRUE : LOGICAL( by_part_l )[0];
 	BOOL all_freqs = asLogical( all_freqs_l ) == NA_LOGICAL ? FALSE : LOGICAL( all_freqs_l )[0];
+	int fw_width = asInteger(fw_width_i) == NA_INTEGER ? -1 : INTEGER(fw_width_i)[0];
+	int edo_f_ref = asInteger(edo_f_ref_i) == NA_INTEGER ? -1 : INTEGER(edo_f_ref_i)[0];
+	int edo_nd = asInteger(edo_ndiv_i) == NA_INTEGER ? -1 : INTEGER(edo_ndiv_i)[0];
 
 	if ( n_samples < 3 )
 		oops("CALLngft_1dComplex64", "time series must have at least 3 points");
@@ -54,7 +59,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	signal = calloc(1, sizeof(*signal));
 	signal->count = n_samples;
 	signal->values = cts;
-	partitions = ngft_1dComplex64(signal, epsilon, ptype, wtype);
+	partitions = ngft_1dComplex64(signal, epsilon, ptype, wtype, fw_width, edo_f_ref, edo_nd);
 	freeDClist(signal); // also frees space pointed to by cts
 
 	// get complex image
@@ -120,10 +125,13 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	SET_STRING_ELT(win_name_s, 0,
 								 mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" :
 												wtype == FWT_BOX ? "Box" : "Unknown"));
+	fw_w_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = fw_width;
+	edo_fref_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_f_ref;
+	edo_nd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_nd;
 
 	/* put the return values into a list */
-	ret_l = PROTECT(allocVector(VECSXP, 13)); pcnt++;
-	names_s = PROTECT(allocVector(VECSXP, 13)); pcnt++;
+	ret_l = PROTECT(allocVector(VECSXP, 16)); pcnt++;
+	names_s = PROTECT(allocVector(VECSXP, 16)); pcnt++;
 	SET_VECTOR_ELT(ret_l, 0, ts_len_i); SET_VECTOR_ELT(names_s, 0, mkChar("ts.len"));
 	SET_VECTOR_ELT(ret_l, 1, deltat_d); SET_VECTOR_ELT(names_s, 1, mkChar("dt"));
 	SET_VECTOR_ELT(ret_l, 2, epsilon_d); SET_VECTOR_ELT(names_s, 2, mkChar("eps"));
@@ -137,6 +145,9 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	SET_VECTOR_ELT(ret_l, 10, time_centers_i); SET_VECTOR_ELT(names_s, 10, mkChar("t.centers"));
 	SET_VECTOR_ELT(ret_l, 11, by_part_l); SET_VECTOR_ELT(names_s, 11, mkChar("by.partition"));
 	SET_VECTOR_ELT(ret_l, 12, all_freqs_l); SET_VECTOR_ELT(names_s, 12, mkChar("all.freqs"));
+	SET_VECTOR_ELT(ret_l, 13, fw_w_i); SET_VECTOR_ELT(names_s, 13, mkChar("fw.width"));
+	SET_VECTOR_ELT(ret_l, 14, edo_fref_i); SET_VECTOR_ELT(names_s, 14, mkChar("edo.fref"));
+	SET_VECTOR_ELT(ret_l, 15, edo_nd_i); SET_VECTOR_ELT(names_s, 15, mkChar("edo.nd"));
 	setAttrib(ret_l, R_NamesSymbol, names_s);
 
 	UNPROTECT(pcnt);
@@ -146,7 +157,8 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 
 
 DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
-																			 SEXP eps_d, SEXP ptype_s, SEXP wtype_s)
+																			 SEXP eps_d, SEXP ptype_s, SEXP wtype_s,
+																			 SEXP fw_width_i, SEXP edo_f_ref_i, SEXP edo_ndiv_i)
 {
 	int ii, pcnt = 0;
 	DCMPLX *dst;
@@ -157,6 +169,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	SEXP ret_l, names_s;
 	SEXP epsilon_d;
 	SEXP part_name_s, win_name_s;
+	SEXP fw_w_i, edo_fref_i, edo_nd_i;
 
 	Rcomplex *gft_r = COMPLEX(gft_c);
 	int dst_len = length(gft_c);
@@ -169,6 +182,9 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	FreqWindowType wtype = asChar(wtype_s) == NA_STRING ? FWT_GAUSSIAN :
 		strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "g", 1) == 0 ? FWT_GAUSSIAN : /* Gaussian */
 		FWT_GAUSSIAN; /* silently ignore anything else, and use Gaussian */
+	int fw_width = asInteger(fw_width_i) == NA_INTEGER ? -1 : INTEGER(fw_width_i)[0];
+	int edo_f_ref = asInteger(edo_f_ref_i) == NA_INTEGER ? -1 : INTEGER(edo_f_ref_i)[0];
+	int edo_nd = asInteger(edo_ndiv_i) == NA_INTEGER ? -1 : INTEGER(edo_ndiv_i)[0];
 
 	if ( dst_len < 3 || ts_len < 3 )
 		error("S-transform and original time series must have at least 3 points");
@@ -178,7 +194,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	/* initialize */
 
 	// create partitions
-	partitions = ngft_FrequencyPartitions(ts_len, epsilon, ptype, wtype);
+	partitions = ngft_FrequencyPartitions(ts_len, epsilon, ptype, wtype, fw_width, edo_f_ref, edo_nd);
 
 	// copy the input dst, and unpack into partitions
 	if ( (dst = calloc( dst_len, sizeof( *dst ) )) == NULL )
@@ -209,17 +225,28 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	// other returned items
 	epsilon_d = PROTECT(allocVector(REALSXP, 1)); pcnt++; REAL(epsilon_d)[0] = epsilon;
 	part_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
-	SET_STRING_ELT(part_name_s, 0, mkChar(ptype == FP_DYADIC ? "Dyadic" : "Unknown"));
+	SET_STRING_ELT(part_name_s, 0,
+								 mkChar(ptype == FP_DYADIC ? "Dyadic" :
+								 ptype == FP_EDO ? "EDO" : 
+								 ptype == FP_FW ? "Fixed" :"Unknown"));
 	win_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
-	SET_STRING_ELT(win_name_s, 0, mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" : "Unknown"));
+	SET_STRING_ELT(win_name_s, 0,
+								 mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" :
+								 wtype == FWT_BOX ? "Box" : "Unknown"));
+	fw_w_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = fw_width;
+	edo_fref_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_f_ref;
+	edo_nd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_nd;
 
 	/* put the return values into a list */
-	ret_l = PROTECT(allocVector(VECSXP, 4)); pcnt++;
-	names_s = PROTECT(allocVector(VECSXP, 4)); pcnt++;
+	ret_l = PROTECT(allocVector(VECSXP, 7)); pcnt++;
+	names_s = PROTECT(allocVector(VECSXP, 7)); pcnt++;
 	SET_VECTOR_ELT(ret_l, 0, cts_c); SET_VECTOR_ELT(names_s, 0, mkChar("TS"));
 	SET_VECTOR_ELT(ret_l, 1, epsilon_d); SET_VECTOR_ELT(names_s, 1, mkChar("eps"));
 	SET_VECTOR_ELT(ret_l, 2, part_name_s); SET_VECTOR_ELT(names_s, 2, mkChar("part.type"));
 	SET_VECTOR_ELT(ret_l, 3, win_name_s); SET_VECTOR_ELT(names_s, 3, mkChar("win.type"));
+	SET_VECTOR_ELT(ret_l, 4, fw_w_i); SET_VECTOR_ELT(names_s, 4, mkChar("fw.width"));
+	SET_VECTOR_ELT(ret_l, 5, edo_fref_i); SET_VECTOR_ELT(names_s, 5, mkChar("edo.fref"));
+	SET_VECTOR_ELT(ret_l, 6, edo_nd_i); SET_VECTOR_ELT(names_s, 6, mkChar("edo.nd"));
 	setAttrib(ret_l, R_NamesSymbol, names_s);
 
 	UNPROTECT(pcnt);

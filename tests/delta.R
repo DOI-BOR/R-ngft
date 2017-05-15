@@ -16,21 +16,19 @@ N <- length(delta)
 df = 1 / (N * dt)
 
 # transform the delta function
-fst.delta <- ngft::fst(delta, dt, eps=0, win.type='b', part.type="d", by.part=FALSE)
-if ( N < 50 )
-  abs(fst.delta$image)
+fst.delta <- ngft::fst(delta, dt, eps=(N-1), win.type='g', part.type="f", fw.width=1, by.part=TRUE)
 
 # plot the modulus. image() plots columns on horizontal axis,
 # so also take transpose
 img.plt <- t(abs(fst.delta$image))
-
 xvals <- seq(from=0,to=fst.delta$wd - 1,by=1)
 yvals <- seq(from=0,to=fst.delta$ht - 1,by=1)
 nlev <- fst.delta$ht
 breaks <- quantile(img.plt, probs=seq(0,1,1/nlev))
 image(x=xvals, y=yvals, z=img.plt,
-      col=grey.colors(length(breaks)-1), breaks=breaks,
+      col=rainbow(length(breaks)-1), breaks=breaks,
       xlab="time index", ylab="frequency index")
+# gray.colors, rainbow, heat.colors, topo.colors, terrain.colors
 
 xvals <- dt * fst.delta$t.centers
 yvals <- df * fst.delta$f.centers

@@ -5,7 +5,8 @@
 \title{Fast S-Transform}
 \usage{
 fst(xt, dt = 0.01, eps = 0, win.type = NA, part.type = NA,
-  img.dim = NA, by.part = TRUE, all.freqs = FALSE)
+  img.dim = NA, by.part = TRUE, all.freqs = FALSE, fw.width = NA,
+  edo.fref = NA, edo.nd = NA)
 }
 \arguments{
 \item{xt}{Equally-sampled input time series. Must convert to numeric vector.}
@@ -36,6 +37,15 @@ N time and frequency values. Default is TRUE}
 
 \item{all.freqs}{Image contains negative as well as non-negative frequencies.
 Default is FALSE.}
+
+\item{fw.width}{Sets the fixed window width if \code{part.type} is \code{Fixed}.
+Default is 10.}
+
+\item{edo.fref}{Sets the reference frequency index if \code{part.type} is
+\code{EDO}. Default is \code{length(xt) / 2}.}
+
+\item{edo.nd}{Sets the number of divisions per octave if \code{part.type} is
+\code{EDO}. Default is 5.}
 }
 \value{
 A list including the complex S-transform of the data, an image sampled on

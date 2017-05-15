@@ -404,7 +404,7 @@ static void freeTimePartitions(TPCOL *tpcol) {
 
 
 // set the limits of the window corresponding to a frequency partition. The window may exactly coincide
-// with the partition (epsilon = 0), or it may be larger - up to 2 x partition_width (epsilon = 1)
+// with the partition (epsilon = 0), or it may be larger - up to N
 static void setWindowLimits(FPART *partition, int N, double epsilon) {
 	int win_start, win_end, win_len;
 
@@ -680,8 +680,9 @@ static FPCOL *fwPartitions(int N, double epsilon, int W) {
 
 
 // create frequency partitions
-DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionType ptype, FreqWindowType wtype) {
-	int ii, f_ref = -1, T = -1, W = -1;
+DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionType ptype, FreqWindowType wtype,
+																					int W, int f_ref, int T) {
+	int ii;
 	TPCOL *tpcol;
 	FPCOL *pars;
 
@@ -794,7 +795,8 @@ static DCMPLX *getWindowDFT(int fcenter, int width, int N, windowFunction *windo
 
 
 // take fast discrete transform of a complex double 1D signal
-DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType ptype, FreqWindowType wtype) {
+DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType ptype, FreqWindowType wtype,
+																	int W, int f_ref, int T) {
 	int ii, N, stride = 1;
 	windowFunction *window_fn = NULL;
 	FPCOL *fpcol;
@@ -805,7 +807,7 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 	signal = sig->values;
 	N = sig->count;
 
-	fpcol = ngft_FrequencyPartitions( N, epsilon, ptype, wtype );
+	fpcol = ngft_FrequencyPartitions( N, epsilon, ptype, wtype, W, f_ref, T );
 
 	if ( fpcol->window_type == FWT_GAUSSIAN )
 		window_fn = gaussian_dft;
@@ -1002,6 +1004,7 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 DllExport void ngft_2dComplex64(DCMPLX *image, int N, int M, windowFunction *window_fn) {
 	int row, col;
 	double epsilon = -1;
+	double f_ref = -1, T = -1, W = -1;
 	FPCOL *pars;
 
 	if ( image == NULL || N <= 0 || M <= 0 )
@@ -1214,6 +1217,7 @@ DllExport DIMAGE *ngft_1d_InterpolateNN(FPCOL *fpcol, int M, BOOL by_part, BOOL 
 
 	// get centers of frequency and time partitions
 	if ( by_part ) {
+		// TODO: this implementation is a kludge if resampling - clean it up by having separate lists
 		f_centers = freqPartitionCenters( fpcol, all_freqs );
 		t_centers = timePartitionCenters( fpcol );
 	} else {
@@ -1225,13 +1229,13 @@ DllExport DIMAGE *ngft_1d_InterpolateNN(FPCOL *fpcol, int M, BOOL by_part, BOOL 
 		t_centers->count = t_dim;
 	}
 
-	// get image
+	// get image. TODO: if downsampling, need to take averages, not just use a single sample
 	for ( ii = 0 ; ii < nf_dim ; ii++ ) {
 		int jj;
 		int is = down_sample ? ROUND(ii / f_factor) : ii;
 		int ff = by_part ? f_centers->values[is] : INDEX_2_FREQ( is, N );
-		if ( ! by_part )
-			f_centers->values[ii] = ff;
+		if ( ! by_part || f_dim != nf_dim )
+			f_centers->values[ii] = ff;	// set f-center (or possibly overwrite, if by_part). TODO: clean up this kludge
 		for ( jj = 0 ; jj < nt_dim ; jj++ ) {
 			DCMPLX *gft;
 			int img_ind;
@@ -1239,10 +1243,22 @@ DllExport DIMAGE *ngft_1d_InterpolateNN(FPCOL *fpcol, int M, BOOL by_part, BOOL 
 			int tt = by_part ? t_centers->values[js] : js;
 			if ( (gft = find_element(fpcol, ff, tt, all_freqs)) == NULL )
 				oops( "ngft_1d_interpolateNN", "Application exception: can't find gft element" );
-			if ( ! by_part )
-				t_centers->values[jj] = tt;
+			if ( ii == nf_dim - 1 && ( ! by_part || t_dim != nt_dim ) )
+				t_centers->values[jj] = tt;	// set t-center (or possibly overwrite, if by_part). TODO: clean up this kludge
 			img_ind = ii * nt_dim + jj; // image stored by row, with time on the horizontal axis, and frequency on the vertical
 			memcpy( image_arr + img_ind, gft, sizeof( *image_arr ) );
+		}
+	}
+
+	if ( by_part ) {
+		// re-size f and t centers if downsampling. TODO: clean up this kludge
+		if ( t_dim != nt_dim ) {
+			t_centers->values = realloc(t_centers->values, nt_dim * sizeof(*(t_centers->values)));
+			t_centers->count = nt_dim;
+		}
+		if ( f_dim != nf_dim ) {
+			f_centers->values = realloc(f_centers->values, nf_dim * sizeof(*(f_centers->values)));
+			f_centers->count = nf_dim;
 		}
 	}
 

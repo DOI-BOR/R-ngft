@@ -20,6 +20,12 @@
 #' }
 #' Characters are case-insensitive, and only need to uniquely
 #' define the option. Default is \code{Gaussian}.
+#' @param fw.width Sets the fixed window width if \code{part.type} is \code{Fixed}.
+#' Default is 10.
+#' @param edo.fref Sets the reference frequency index if \code{part.type} is
+#' \code{EDO}. Default is \code{length(xt) / 2}.
+#' @param edo.nd Sets the number of divisions per octave if \code{part.type} is
+#' \code{EDO}. Default is 5.
 #' @return A list including the complex time series of the data, and
 #' the window type used.
 #' @details If Gaussian windows are selected, the results are discrete S-transforms.
@@ -41,7 +47,8 @@
 #' \item \href{https://sourceforge.net/projects/fst-uofc/}{Original GFT library at SourceForge}
 #' }
 #' @keywords ts
-ifst <- function(dst, ts_len, dt=0.01, eps=0.0, win.type=NA, part.type=NA) {
+ifst <- function(dst, ts_len, dt=0.01, eps=0.0, win.type=NA, part.type=NA,
+                 fw.width=NA, edo.fref=NA, edo.nd=NA) {
 
   xt <- as.double(xt[!is.na(xt)])
   len <- length(xt)
@@ -51,6 +58,7 @@ ifst <- function(dst, ts_len, dt=0.01, eps=0.0, win.type=NA, part.type=NA) {
   # call C function
   out <- .Call("CALLngft_1dComplex64Inv",
                as.complex(gft), as.integer(ts_len), as.double(dt),
-               as.double(eps), as.character(part.type), as.character(win.type))
+               as.double(eps), as.character(part.type), as.character(win.type),
+               as.integer(fw.width), as.integer(edo.fref), as.integer(edo.nd))
   return(out)
 }

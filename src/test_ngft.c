@@ -55,7 +55,7 @@ int main( int argc, char **argv ) {
 	FILE *infile = stdin, *outfile = stdout;
 	BOOL do_inverse = FALSE, do_image = FALSE, gaussian_window = TRUE;
 	BOOL by_part = TRUE, all_freqs = FALSE;
-	int stride = 1, image_dim = -1;
+	int stride = 1, image_dim = -1, fw_width = -1, edo_fref = -1, edo_nd = -1;
 	FPCOL *partitions;
 	FreqPartitionType ptype = FP_DYADIC;
 	FreqWindowType wtype = FWT_GAUSSIAN;
@@ -67,7 +67,7 @@ int main( int argc, char **argv ) {
 			switch ( *(*argv + 1) ) {
 				case 'h':
 				case 'H':
-					fprintf( stdout, "USAGE: %s [-h|-H] [-i] [-I] [-a] [-A] [-e eps] [-o outfile] [infile]\n", progname );
+					fprintf( stdout, "USAGE: %s [-h|-H] [-i] [-I] [-a] [-A] [-M dim] [-e eps]\n\t\t[-p ptype] [-w wtype] [-W fw_width] [-f edo_fref] [-n edo_nd]\n\t\t[-o outfile] [infile]\n", progname );
 					break;
 				case 'i': // do inverse
 					do_inverse = TRUE;
@@ -79,16 +79,16 @@ int main( int argc, char **argv ) {
 					break;
 				case 'a': // output image for all times and freqs, instead of by partition
 					by_part = FALSE;
-					if ( !do_inverse )
-						do_image = TRUE;
 					break;
 				case 'A': // output image results for all frequencies
 					all_freqs = TRUE;
-					if ( !do_inverse )
-						do_image = TRUE;
 					break;
 				case 'e': // epsilon
 					epsilon = atof(*++argv);
+					argc--;
+					break;
+				case 'M': // image dimension
+					image_dim = atoi(*++argv);
 					argc--;
 					break;
 				case 'p':	// partition type: 1 - dyadic, 2 - EDO, 3 - fixed width
@@ -97,6 +97,18 @@ int main( int argc, char **argv ) {
 					break;
 				case 'w':	// window type: 1 - Gaussian, 2 - Box
 					wtype = atoi(*++argv);
+					argc--;
+					break;
+				case 'W': // width for fixed width partitions
+					fw_width = atoi(*++argv);
+					argc--;
+					break;
+				case 'f': // EDO reference frequency
+					edo_fref = atoi(*++argv);
+					argc--;
+					break;
+				case 'n': // EDO number of divisions per octave
+					edo_nd = atoi(*++argv);
 					argc--;
 					break;
 				case 'o':
@@ -156,7 +168,7 @@ int main( int argc, char **argv ) {
 		DCLIST *signal = calloc(1, sizeof(*signal));
 		signal->count = dcount;
 		signal->values = data_in;
-		partitions = ngft_1dComplex64(signal, epsilon, ptype, wtype);
+		partitions = ngft_1dComplex64(signal, epsilon, ptype, wtype, fw_width, edo_fref, edo_nd);
 		freeDClist(signal); // also frees space pointed to by data_in
 		gft = ngft_makeGftArray(partitions);
 		fprintf( outfile, "%d\n", partitions->N );
@@ -167,7 +179,7 @@ int main( int argc, char **argv ) {
 	} else {
 		DCLIST *gft, *cts;
 		// create partitions
-		partitions = ngft_FrequencyPartitions(ts_len, epsilon, ptype, wtype);
+		partitions = ngft_FrequencyPartitions(ts_len, epsilon, ptype, wtype, fw_width, edo_fref, edo_nd);
 		gft = calloc(1, sizeof(*gft));
 		gft->count = dcount;
 		gft->values = data_in;

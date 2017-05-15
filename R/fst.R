@@ -24,6 +24,12 @@
 #' N time and frequency values. Default is TRUE
 #' @param all.freqs Image contains negative as well as non-negative frequencies.
 #' Default is FALSE.
+#' @param fw.width Sets the fixed window width if \code{part.type} is \code{Fixed}.
+#' Default is 10.
+#' @param edo.fref Sets the reference frequency index if \code{part.type} is
+#' \code{EDO}. Default is \code{length(xt) / 2}.
+#' @param edo.nd Sets the number of divisions per octave if \code{part.type} is
+#' \code{EDO}. Default is 5.
 #' @return A list including the complex S-transform of the data, an image sampled on
 #' the time and freq partition centers (usually small in dimension), the height and width
 #' of the image, the frequency-partition centers, the time-partition centers,
@@ -48,7 +54,7 @@
 #' }
 #' @keywords ts
 fst <- function(xt, dt=0.01, eps=0.0, win.type=NA, part.type=NA, img.dim=NA,
-                by.part=TRUE, all.freqs=FALSE) {
+                by.part=TRUE, all.freqs=FALSE, fw.width=NA, edo.fref=NA, edo.nd=NA) {
 
 	xt <- as.double(xt[!is.na(xt)])
 	len <- length(xt)
@@ -59,6 +65,7 @@ fst <- function(xt, dt=0.01, eps=0.0, win.type=NA, part.type=NA, img.dim=NA,
 	out <- .Call("CALLngft_1dComplex64",
 							 as.double(xt), as.double(dt), as.double(eps), as.character(part.type),
 							 as.character(win.type), as.integer(img.dim), as.logical(by.part),
-							 as.logical(all.freqs))
+							 as.logical(all.freqs), as.integer(fw.width), as.integer(edo.fref),
+							 as.integer(edo.nd))
 	return(out)
 }

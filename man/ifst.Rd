@@ -4,7 +4,8 @@
 \alias{ifst}
 \title{Fast Inverse S-Transform}
 \usage{
-ifst(dst, ts_len, dt = 0.01, eps = 0, win.type = NA, part.type = NA)
+ifst(dst, ts_len, dt = 0.01, eps = 0, win.type = NA, part.type = NA,
+  fw.width = NA, edo.fref = NA, edo.nd = NA)
 }
 \arguments{
 \item{dst}{Fast S-transform, as returned by \code{\link{fst}}. Must convert to complex vector.}
@@ -29,6 +30,15 @@ define the option. Default is \code{Gaussian}.}
 }
 Characters are case-insensitive, and only need to uniquely
 define the option. Default is \code{Dyadic}.}
+
+\item{fw.width}{Sets the fixed window width if \code{part.type} is \code{Fixed}.
+Default is 10.}
+
+\item{edo.fref}{Sets the reference frequency index if \code{part.type} is
+\code{EDO}. Default is \code{length(xt) / 2}.}
+
+\item{edo.nd}{Sets the number of divisions per octave if \code{part.type} is
+\code{EDO}. Default is 5.}
 }
 \value{
 A list including the complex time series of the data, and
