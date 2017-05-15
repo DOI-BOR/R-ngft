@@ -126,8 +126,11 @@ typedef struct {
 	// a power of 2, separate partitions allows for simpler code, and there's no performance penalty.
 	int N;	// the data length spanned by the partitions
 	double epsilon; // fractional amount of overlap for frequency partitions; 0 if none
-	FreqPartitionType partition_type;	// type of frequency partition (e.g., dyadic, equal-temperament, etc.)
+	FreqPartitionType partition_type;	// type of frequency partition (e.g., dyadic, EDO, fixed-width, etc.)
 	FreqWindowType window_type;	// type of frequency-domain window (e.g., Gaussian, box, etc.)
+	int fw_width;	// for fixed-width partitions, the partition width
+	int edo_fref;	// for EDO partitions, the reference frequency
+	int edo_nd;	// for EDO partitions, the number of divisions per octave
 	FPSET fpset[2];	// array of partitions for non-negative (index 0) and negative (index 1) frequencies
 	TPCOL *tpcol;	// pointer to a time-partition collection used by this frequency partitioning
 } FPCOL;

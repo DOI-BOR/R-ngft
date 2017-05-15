@@ -26,11 +26,6 @@
 #include "ngft_proto.h"
 
 
-// For odd width partitions, the center point is unambiguous. For even width, the center point
-// can be at the end of the left half (left_bias=T), or the start of the right half (left_bias=F).
-BOOL left_bias = TRUE;
-
-
 // fftw wrapper from original GFT library
 static void fft(int N, DCMPLX *in, int stride) {
 	fftw_plan p;
@@ -207,8 +202,34 @@ static DCMPLX *gaussian_dft(int N, int freq) {
 }
 
 
-// return the FT of a time-domain sinc windowing function of
-// width N. 
+// If the length N of a time-domain window is odd, then index 0 of the window will be exactly
+// at time 0. However, if N is even, however, then time 0 will be shifted by 1/2 of a sample period
+// from index 0, which introduces a phase shift. In that case, the imaginary parts of the DFT
+// aren't zero. That phase shift is applied by this function.
+static void phase_shift(DCMPLX *win, int N) {
+	int ii;
+	double fscale = M_PI / N;
+
+	if ( ! IS_EVEN(N) )
+		return;
+
+	// Apply phase shift to positive and negative frequencies. Note that the phase shift at
+	// frequency 0 is 0, so don't need to do anything for that case
+	for ( ii = 1 ; ii <= N / 2 ; ii++ ) {
+		DCMPLX ps = {cos(ii * fscale), -sin(ii * fscale)};
+		// apply phase shift for positive frequencies
+		cmul(win + ii, &ps);
+		// apply phase shift for negative frequencies
+		if ( ii < N / 2 ) {
+			ps.i = -ps.i;	// need complex conjugate for corresponding negative frequency
+			cmul(win + N - ii, &ps);
+		}
+	}
+
+}
+
+
+// return the FT of a time-domain sinc windowing function of width N. 
 static DCMPLX *box_dft(int N, int freq) {
 	int ii, lshift, abs_freq = ABS(freq);	// window width is abs_freq if epsilon=0; otherwise, it's wider
 	DCMPLX *win = calloc(N, sizeof( *win ));
@@ -220,37 +241,12 @@ static DCMPLX *box_dft(int N, int freq) {
 		win[ii].r = 1; // elements outside window are actually 0, but we can set everything to 1 here
 
 	// this isn't needed if we're not setting the width of the boxcar here
-	lshift = abs_freq / 2 + (IS_EVEN(abs_freq) && left_bias ? -1 : 0);
+	lshift = abs_freq / 2 + (IS_EVEN(abs_freq) ? -1 : 0);
 	shift(win, N, -lshift);
 
-	if ( IS_EVEN(N) ) {
-		// Note: If N is odd, then index 0 of the time-domain sinc function will be exactly
-		// at time 0. If N is even, however, then time 0 is shifted by 1/2 of a sample period
-		// from index 0, which introduces a phase shift, so the imaginary parts of the DFT
-		// aren't zero. That phase shift is applied here.
-		double fscale = M_PI / N;
-		for ( ii = 1 ; ii <= N / 2 ; ii++ ) {
-			DCMPLX ps = {cos(ii * fscale), (left_bias ? -1 : 1) * sin(ii * fscale)};
-			if ( ii < N / 2 || left_bias )
-				cmul(win + ii, &ps);
-			if ( ii < N / 2 || ! left_bias ) {
-				ps.i = -ps.i;	// need complex conjugate for corresponding negative frequency
-				cmul(win + N - ii, &ps);
-			}
-		}
-	}
-
-#ifdef NGFT_VERBOSE_DEBUG
-	{
-		double win_sum = 0;
-		for ( ii = 0 ; ii < N ; ii++ )
-			win_sum += modulus(win + ii);
-		fprintf(stderr, "FFT: freq=%2d, win_sum=%.3f\n", freq, win_sum);
-		for ( ii = 0 ; ii < N ; ii++ )
-			fprintf(stderr, "\t%4d:  %10.3e %10.3e\t%9.3e\n", ii, win[ii].r, win[ii].i, modulus(win + ii));
-		fflush(stderr);
-	}
-#endif
+	// apply phase shift for even N
+	if ( IS_EVEN(N) )
+		phase_shift(win, N);
 
 	return(win);
 }
@@ -261,12 +257,12 @@ static DCMPLX *box_dft(int N, int freq) {
 // width is odd. For even width, and overlapping windows, there are ambiguities at the 0 and
 // midpoint frequency.
 
-static int shift_left(int idx, BOOL left_bias, BOOL is_f, int N) {
+static int shift_left(int idx, BOOL is_f, int N) {
 	// for frequency indicies, left_bias for positive frequencies implies right_bias for negative frequencies,
 	// if the windows are to be symmetric between positive and negative frequencies.
-	return is_f ? ((left_bias && idx <= N / 2) || (!left_bias && idx > N / 2)) : left_bias;
+	return is_f ? idx <= N / 2 : TRUE;
 }
-static int start_2_center(int start, int width, BOOL left_bias, BOOL is_f, int N) {
+static int start_2_center(int start, int width, BOOL is_f, int N) {
 	int center = start + width / 2;
 
 	// Note: there is ambiguity in which center to return for the cases where width is even,
@@ -275,29 +271,29 @@ static int start_2_center(int start, int width, BOOL left_bias, BOOL is_f, int N
 	if ( is_f && IS_EVEN(width) && center == N / 2 + 1 )
 		oops("start_2_center", "application exception: indeterminate center");
 
-	if ( IS_EVEN(width) && shift_left(center, left_bias, is_f, N) )
+	if ( IS_EVEN(width) && shift_left(center, is_f, N) )
 		center -= 1;
 	center %= N;
 	if ( center < 0 )
 		center += N;
 	return center;
 }
-static int center_2_start(int center, int width, BOOL left_bias, BOOL is_f, int N) {
+static int center_2_start(int center, int width, BOOL is_f, int N) {
 	int start = center - width / 2;
 	// Note: for even width, there is ambiguity for the case of true center = +/- 1/2 (center = 0),
 	// but taking the +1/2 case allows glossing over it for this code
-	if ( IS_EVEN(width) && shift_left(center, left_bias, is_f, N) )
+	if ( IS_EVEN(width) && shift_left(center, is_f, N) )
 		start += 1;
 	start %= N;
 	if ( start < 0 )
 		start += N;
 	return start;
 }
-static int center_2_end(int center, int width, BOOL left_bias, BOOL is_f, int N) {
+static int center_2_end(int center, int width, BOOL is_f, int N) {
 	int end = center + width / 2;
 	// Note: for even width, there is ambiguity for the case of true center = +/- 1/2 (center = 0),
 	// but taking the +1/2 case allow glossing over it for this code
-	if ( IS_EVEN(width) && ! shift_left(center, left_bias, is_f, N) )
+	if ( IS_EVEN(width) && ! shift_left(center, is_f, N) )
 		end -= 1;
 	end %= N;
 	if ( end < 0 )
@@ -330,7 +326,7 @@ static void make_tdset(int N, FPART *fpart, TDSET *tdset) {
 		partition->start = tc;
 		partition->width = ROUND( tc_exact + exact_tp_width - tc );
 		partition->end = partition->start + partition->width - 1;
-		partition->center = start_2_center( partition->start, partition->width, left_bias, FALSE, N );
+		partition->center = start_2_center( partition->start, partition->width, FALSE, N );
 
 		tc += partition->width;
 	}
@@ -411,8 +407,8 @@ static void setWindowLimits(FPART *partition, int N, double epsilon) {
 	if ( epsilon > 0 ) {
 		BOOL is_f = TRUE;
 		win_len = MIN(ROUND((1 + epsilon) * partition->width), N);	// window can't exceed length
-		win_start = center_2_start( partition->center, win_len, left_bias, is_f, N );
-		win_end = center_2_end( partition->center, win_len, left_bias, is_f, N );
+		win_start = center_2_start( partition->center, win_len, is_f, N );
+		win_end = center_2_end( partition->center, win_len, is_f, N );
 	} else {
 		// use partition start and end (no overlap)
 		win_start = partition->start;
@@ -462,9 +458,7 @@ static void add_freq_partition(FPART **ppart, int *pcount, int fs, int fe, int N
 		end = NEG_F_IND(fs, N);	// frequencies so that start < end for array ops
 	}
 	width = end - start + 1;
-	// for odd width, center is unambiguous. For even width, center can be at end
-	// of the left half (left_bias=T), or the start of the right half (left_bias=F).
-	center = start_2_center( start, width, left_bias, TRUE, N );
+	center = start_2_center( start, width, TRUE, N );
 
 	// set partition indices [0, N-1] into the N-length frequency array, using standard DFT ordering
 	p->start = start;
@@ -529,6 +523,7 @@ static FPCOL *dyadicPartitions(int N, double epsilon) {
 	partition_collection->fpset[0].pcount = pcount;
 	partition_collection->fpset[1].partitions = n_partitions;
 	partition_collection->fpset[1].pcount = n_pcount;
+	partition_collection->epsilon = epsilon;
 	partition_collection->partition_type = FP_DYADIC;
 
 	return partition_collection;
@@ -618,7 +613,10 @@ static FPCOL *edoPartitions(int N, double epsilon, int f_ref, int T) {
 	partition_collection->fpset[0].pcount = pcount;
 	partition_collection->fpset[1].partitions = n_partitions;
 	partition_collection->fpset[1].pcount = n_pcount;
+	partition_collection->epsilon = epsilon;
 	partition_collection->partition_type = FP_EDO;
+	partition_collection->edo_fref = f_ref;
+	partition_collection->edo_nd = T;
 
 	return partition_collection;
 }
@@ -673,7 +671,9 @@ static FPCOL *fwPartitions(int N, double epsilon, int W) {
 	partition_collection->fpset[0].pcount = pcount;
 	partition_collection->fpset[1].partitions = n_partitions;
 	partition_collection->fpset[1].pcount = n_pcount;
+	partition_collection->epsilon = epsilon;
 	partition_collection->partition_type = FP_FW;
+	partition_collection->fw_width = W;
 
 	return partition_collection;
 }
@@ -773,14 +773,10 @@ static DCMPLX *getWindowDFT(int fcenter, int width, int N, windowFunction *windo
 		win[0].r = 1;
 	} else { // width > 1
 		if ( fcenter == 0 ) {
-			// sigma-t is infinite in this case, so the Gaussian is ill-defined. Need a boxcar from
-			// start to end, with a height of 1 (TODO: should this be normalized to 1/width?)
+			// sigma-t is infinite in this case, so the Gaussian is ill-defined. Just make it a delta function at 0
 			int ii;
 			win = calloc( N, sizeof( *win ) );
-			// rather than re-creating the window, or passing the window arguments, just set all N elements
-			// to 1, and let the calling function grab 'width' of them from wherever it wants.  
-			for ( ii = 0 ; ii < N ; ii++ )
-				win[ii].r = 1.;
+			win[0].r = 1;
 		} else {
 			// get DFT of time-domain window of length N, centered on freq=0
 			win = window_fn(N, fcenter);
@@ -834,8 +830,8 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 			int win_start = partition->win_start;
 			int win_len = partition->win_len;
 
-			// get DFT of N-length time-domain window function for this center frequency
-			win = getWindowDFT(fcenter, win_len, N, window_fn); // length is N, original f=0 is centered on fcenter
+			// get DFT of N-length time-domain window function for this center frequency, 0-index shifted to f-center
+			win = getWindowDFT(fcenter, win_len, N, window_fn); // length is N
 
 			// make DST and apply the window to the spectrum
 			dst = calloc( win_len, sizeof( *dst ) );
@@ -846,7 +842,7 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 			}
 			free( win );	// done with window
 
-			// inverse FFT the windowed and transformed data to get this piece of S-space
+			// inverse FFT the windowed and transformed data to get this row of S-space
 			ifft( win_len, dst, stride );
 
 			// save this row of the S-transform.
