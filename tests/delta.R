@@ -18,10 +18,12 @@ df = 1 / (N * dt)
 
 # transform the delta function
 dec=1
-fst.delta <- ngft::fst(delta, dt, eps=(N/dec-1), win.type='g', part.type="f", fw.width=dec, by.part=TRUE)
-#fst.delta <- ngft::fst(delta, dt, eps=(N-1), win.type='g', part.type="d", fw.width=1, by.part=TRUE)
-#fst.delta <- ngft::fst(delta, dt, eps=7, win.type='g', part.type="d", fw.width=1, by.part=TRUE)
-#fst.delta <- ngft::fst(delta, dt, eps=(N-1), win.type='g', part.type="e", fw.width=1, by.part=TRUE)
+fst.delta <- ngft::fst(delta, dt, eps=(N/dec-1), win.type='g', part.type="f", fw.width=dec, by.part=FALSE)
+#fst.delta <- ngft::fst(delta, dt, eps=(N-1), win.type='g', part.type="d", by.part=FALSE)
+#fst.delta <- ngft::fst(delta, dt, eps=3, win.type='g', part.type="d", by.part=FALSE)
+#fst.delta <- ngft::fst(delta, dt, eps=(N-1), win.type='g', part.type="e", by.part=FALSE)
+#fst.delta <- ngft::fst(delta, dt, eps=(N/8-1), win.type='g', part.type="e", by.part=FALSE)
+#fst.delta <- ngft::fst(delta, dt, eps=(N-1), win.type='b', part.type="e", by.part=FALSE)
 
 # plot the modulus. image() plots columns on horizontal axis,
 # so also take transpose

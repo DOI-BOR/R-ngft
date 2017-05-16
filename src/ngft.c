@@ -401,12 +401,13 @@ static void freeTimePartitions(TPCOL *tpcol) {
 
 // set the limits of the window corresponding to a frequency partition. The window may exactly coincide
 // with the partition (epsilon = 0), or it may be larger - up to N
-static void setWindowLimits(FPART *partition, int N, double epsilon) {
+static void setWindowLimits(FPART *partition, int N, double epsilon, int fixed_width) {
 	int win_start, win_end, win_len;
 
-	if ( epsilon > 0 ) {
+	if ( epsilon > 0 || fixed_width > 0 ) {
 		BOOL is_f = TRUE;
-		win_len = MIN(ROUND((1 + epsilon) * partition->width), N);	// window can't exceed length
+		win_len = fixed_width > 0 ? fixed_width : ROUND((1 + epsilon) * partition->width);
+		win_len = MIN(win_len, N);	// window can't exceed total length
 		win_start = center_2_start( partition->center, win_len, is_f, N );
 		win_end = center_2_end( partition->center, win_len, is_f, N );
 	} else {
@@ -425,7 +426,7 @@ static void setWindowLimits(FPART *partition, int N, double epsilon) {
 // for specified starting and ending frequencies fs and fe (both non-negative or negative)
 // of a partitioning, define the start, center, and end indices into the N frequencies,
 // and allocate a new partition structure to store them
-static void add_freq_partition(FPART **ppart, int *pcount, int fs, int fe, int N, double epsilon) {
+static void add_freq_partition(FPART **ppart, int *pcount, int fs, int fe, int N, double epsilon, int fixed_width) {
 	FPART *p;
 	int start, center, end, width;
 
@@ -467,7 +468,7 @@ static void add_freq_partition(FPART **ppart, int *pcount, int fs, int fe, int N
 	p->width = width;
 
 	// set window indices [0, N-1] into the N-length frequency array, using standard DFT ordering
-	setWindowLimits(p, N, epsilon);
+	setWindowLimits(p, N, epsilon, fixed_width);
 
 	// initialize pointers to NULL
 	p->tdset = NULL;
@@ -500,16 +501,16 @@ static FPCOL *dyadicPartitions(int N, double epsilon) {
 	n_partitions = NULL, n_pcount = 0; // negative frequency partitions
 
 	// handle 0-frequency as a special case
-	add_freq_partition( &partitions, &pcount, 0, 0, N, epsilon );
+	add_freq_partition( &partitions, &pcount, 0, 0, N, epsilon, -1 );
 
 	// loop over powers of 2 in (positive) frequency, from 1 to Nyquist,
 	// to make dyadic partitions for positive and negative frequencies
 	for ( fs = 1 ; fs <= N / 2 ; fs *= 2 ) {
 		// add positive frequencies
-		add_freq_partition( &partitions, &pcount, fs, 2 * fs - 1, N, epsilon );
+		add_freq_partition( &partitions, &pcount, fs, 2 * fs - 1, N, epsilon, -1 );
 		// add negative frequencies (except for Nyquist, unless N is odd)
 		if ( fs < N/2 || IS_ODD(N) )
-			add_freq_partition( &n_partitions, &n_pcount, -fs, -2 * fs + 1, N, epsilon );
+			add_freq_partition( &n_partitions, &n_pcount, -fs, -2 * fs + 1, N, epsilon, -1 );
 	}
 
 	// sort the negative partitions by decreasing frequency to be
@@ -578,10 +579,10 @@ static FPCOL *edoPartitions(int N, double epsilon, int f_ref, int T) {
 			continue;
 		fs_prev = fs;
 		// add positive frequencies
-		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon);
+		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon, -1);
 		// add negative frequencies (except for Nyquist - unless N is odd - or 0)
 		if ( fs > 0 && ( fs < N / 2  || IS_ODD(N) ) )
-			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon);
+			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon, -1);
 	} while ( fs_prev > 0 );
 
 	// get partitions with frequencies greater than the reference
@@ -596,10 +597,10 @@ static FPCOL *edoPartitions(int N, double epsilon, int f_ref, int T) {
 			continue;
 		fe_prev = fe;
 		// add positive frequencies
-		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon);
+		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon, -1);
 		// add negative frequencies (except for Nyquist, unless N is odd)
 		if ( fs < N / 2 || IS_ODD(N) )
-			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon);
+			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon, -1);
 	}
 
 	// sort the partitions to be consistent with normal frequency ordering
@@ -626,7 +627,7 @@ static FPCOL *edoPartitions(int N, double epsilon, int f_ref, int T) {
 // The underlying partitions remain unchanged, and never overlap, regardless of epsilon.
 // Note: f_ref and T can be set <= 0 to use default values
 static FPCOL *fwPartitions(int N, double epsilon, int W) {
-	int fe_prev, pcount, n_pcount;
+	int fe_prev, pcount, n_pcount, fixed_width;
 	FPART *partitions, *n_partitions;
 	FPCOL *partition_collection;
 
@@ -640,11 +641,12 @@ static FPCOL *fwPartitions(int N, double epsilon, int W) {
 		W = N / 4;
 
 	// initialize
+	fixed_width = ROUND((1 + epsilon) * W);	// ensure that all partition windows have the same width
 	partitions = NULL, pcount = 0;	// non-negative frequency partitions
 	n_partitions = NULL, n_pcount = 0; // negative frequency partitions
 
 	// handle 0-frequency as a special case
-	add_freq_partition( &partitions, &pcount, 0, 0, N, epsilon );
+	add_freq_partition( &partitions, &pcount, 0, 0, N, epsilon, fixed_width );
 
 	// get fixed-width partitions starting from frequency = 1
 	fe_prev = 0;
@@ -655,10 +657,10 @@ static FPCOL *fwPartitions(int N, double epsilon, int W) {
 			fe = N / 2;
 		fe_prev = fe;
 		// add positive frequencies
-		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon);
+		add_freq_partition(&partitions, &pcount, fs, fe, N, epsilon, fixed_width);
 		// add negative frequencies (except for Nyquist - unless N is odd)
 		if ( fs < N / 2  || IS_ODD(N) )
-			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon);
+			add_freq_partition(&n_partitions, &n_pcount, -fs, -fe, N, epsilon, fixed_width);
 	} while ( fe_prev < N / 2 );
 
 	// sort the partitions to be consistent with normal frequency ordering

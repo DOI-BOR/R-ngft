@@ -125,9 +125,9 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	SET_STRING_ELT(win_name_s, 0,
 								 mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" :
 												wtype == FWT_BOX ? "Box" : "Unknown"));
-	fw_w_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = fw_width;
-	edo_fref_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_f_ref;
-	edo_nd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_nd;
+	fw_w_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(fw_w_i)[0] = fw_width;
+	edo_fref_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(edo_fref_i)[0] = edo_f_ref;
+	edo_nd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(edo_nd_i)[0] = edo_nd;
 
 	/* put the return values into a list */
 	ret_l = PROTECT(allocVector(VECSXP, 16)); pcnt++;
