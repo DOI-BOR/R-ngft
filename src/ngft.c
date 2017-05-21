@@ -787,7 +787,6 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 	// get the DFT of the signal, overwriting input. Result is length N, standard in-order frequency ordering
 	fwd_fft(signal, N);
 
-#define CMPLX64_I_DEBUG
 #ifdef CMPLX64_I_DEBUG
 	if ( W == 1 ) {
 		fprintf(stderr, "# FFT:      Re(z)         Im(z)            |z|\n");
@@ -1005,101 +1004,73 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 
 
 // take inverse fast discrete transform of a complex N x N DST using
-// standard method of time integration of ST, and then inverse FFT
-DllExport DCLIST *ngft_1dComplex64Inv_I( FPCOL *fpcol ) {
-	int ii, N;
+// standard integral methods
+DllExport DCLIST *ngft_1dComplex64Inv_Std( FPCOL *fpcol, InverseType itype ) {
+	int N;
 	DCMPLX *signal;
 	DCLIST *sig;
 
 	if ( fpcol == NULL )
-		oops( "ngft_1dComplex64Inv_I", "Invalid argument: fpcol is null" );
+		oops( "ngft_1dComplex64Inv_Std", "Invalid argument: fpcol is null" );
 	if ( fpcol->partition_type != FP_FW && fpcol->fw_width != 1 )
-		oops( "ngft_1dComplex64Inv_I", "Invalid argument: only available for fixed-width partitions of width 1" );
+		oops( "ngft_1dComplex64Inv_Std", "Invalid argument: only available for fixed-width partitions of width 1" );
+	if ( itype != INV_FREQ && itype != INV_TIME )
+		oops( "ngft_1dComplex64Inv_Std", "Invalid argument: itype must be either INV_FREQ or INV_TIME" );
 
 	N = fpcol->N;
 
 	// create initialized space for signal
 	signal = calloc( N, sizeof( *signal ) );
 
-	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets
-	for ( ii = 0 ; ii < 2 ; ii++ ) {
-		int jj;
-		FPSET *fpset = fpcol->fpset + ii;
-		// loop over the frequency partitions in this set
-		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
-			int kk, ff;
-			FPART *fpart = fpset->partitions + jj;
-			ff = fpart->center;
-			// integrate gft at this frequency over time
-			for ( kk = 0 ; kk < fpart->gft->count ; kk++ ) {
-				signal[ff].r += fpart->gft->values[kk].r;
-				signal[ff].i += fpart->gft->values[kk].i;
+	if ( itype == INV_FREQ ) {
+		// use standard method of time-integration of ST, and then inverse FFT
+		int ii;
+		for ( ii = 0 ; ii < 2 ; ii++ ) {
+			int jj;
+			FPSET *fpset = fpcol->fpset + ii;
+			// loop over the frequency partitions in this set
+			for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
+				int kk;
+				FPART *fpart = fpset->partitions + jj;
+				int f_idx = fpart->center;	// note: equal to jj only for positive frequencies
+				// integrate over time the gft at this frequency
+				for ( kk = 0 ; kk < fpart->gft->count ; kk++ ) {
+					signal[f_idx].r += fpart->gft->values[kk].r;
+					signal[f_idx].i += fpart->gft->values[kk].i;
+				}
 			}
-#ifdef CMPLX64_I_DEBUG
-			fprintf( stderr, "%4d: %15.8e %15.8e\t %14.8e\n",
-							INDEX_2_FREQ(ff, N), signal[ff].r, signal[ff].i, modulus(signal+ff) );
-#endif
 		}
-	}
-
-	// inverse FFT to recover the signal
-	inv_fft(signal, N);
-
-	// encapsulate signal into structure and return
-	sig = calloc(1, sizeof(*sig));
-	sig->values = signal;
-	sig->count = N;
-
-	return sig;
-}
-
-
-// take inverse fast discrete transform of a complex N x N DST using
-// the method of Schimmel and Gallart (2005)
-DllExport DCLIST *ngft_1dComplex64Inv_II( FPCOL *fpcol ) {
-	int tt, N;
-	DCMPLX *signal;
-	DCLIST *sig, *st;
-	double fscale;
-
-	if ( fpcol == NULL )
-		oops( "ngft_1dComplex64Inv_II", "Invalid argument: fpcol is null" );
-	if ( fpcol->N == 0 )
-		oops( "ngft_1dComplex64Inv_II", "Invalid argument: fpcol->N is zero" );
-	if ( fpcol->partition_type != FP_FW && fpcol->fw_width != 1 )
-		oops( "ngft_1dComplex64Inv_II", "Invalid argument: only available for fixed-width partitions of width 1" );
-
-	N = fpcol->N;
-	fscale = 2 * M_PI / N;
-
-	// get the N x N S-transform array
-	st = ngft_makeGftArray(fpcol);
-	if ( st->count != N * N )
-		oops("ngft_1dComplex64Inv_II", "Program exception: S-transform count != N^2");
-
-	// create initialized space for signal
-	signal = calloc( N, sizeof( *signal ) );
-
-	for ( tt = 0 ; tt < N ; tt++ ) {
-		int f_idx;
-		// Integrate over frequency. Skip ff = 0 for now. TODO: handle the ff=0 case
-		for ( f_idx = 1 ; f_idx < N ; f_idx++ ) {
-			int ff = INDEX_2_FREQ(f_idx, N);
-			DCMPLX cexp = {cos(ff * tt * fscale), sin(ff * tt * fscale)};
-			int st_idx = f_idx * N + tt;	// get index into st array for this time and frequency
-			DCMPLX st_val = st->values[st_idx];
-			cmulByReal(&st_val, 1. / ABS(ff));	// divide by |f|.
-			cmul(&st_val , &cexp);	// multiply by complex exponent for this frequency and time
-			// add result to sum for this time
-			signal[tt].r += st_val.r;
-			signal[tt].i += st_val.i;
+		// inverse FFT to recover the signal
+		inv_fft(signal, N);
+	} else if ( itype == INV_TIME ) {
+		// take inverse fast discrete transform of a complex N x N DST using
+		// the time-localization method of Schimmel and Gallart (2005)
+		int tt;
+		double fscale = 2 * M_PI / N;
+		// get the N x N S-transform array
+		DCLIST *st = ngft_makeGftArray(fpcol);
+		if ( st->count != N * N )
+			oops("ngft_1dComplex64Inv_Std", "Program exception: S-transform count != N^2");
+		// loop over time
+		for ( tt = 0 ; tt < N ; tt++ ) {
+			int f_idx;
+			// Integrate over frequency for this time. Skip ff = 0 for now. TODO: handle the ff=0 case
+			for ( f_idx = 1 ; f_idx < N ; f_idx++ ) {
+				int ff = INDEX_2_FREQ(f_idx, N);
+				DCMPLX cexp = {cos(ff * tt * fscale), sin(ff * tt * fscale)};
+				int st_idx = f_idx * N + tt;	// get index into st array for this time and frequency
+				DCMPLX st_val = st->values[st_idx];
+				cmulByReal(&st_val, 1. / ABS(ff));	// divide by |f|.
+				cmul(&st_val , &cexp);	// multiply by complex exponent for this frequency and time
+																// add result to sum for this time
+				signal[tt].r += st_val.r;
+				signal[tt].i += st_val.i;
+			}
+			// need to scale frequency integral by factor of sqrt(2*pi)
+			cmulByReal(signal + tt, sqrt(2 * M_PI));
 		}
-		// need to scale frequency integral by factor of sqrt(2*pi)
-		cmulByReal(signal + tt, sqrt(2 * M_PI));
+		freeDClist(st);
 	}
-
-	freeDClist(st);
 
 	// encapsulate signal into structure and return
 	sig = calloc(1, sizeof(*sig));

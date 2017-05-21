@@ -67,8 +67,10 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	nf = image->y_centers->count;
 	nt = image->x_centers->count;
 
-	// get the gft as a linear array - only used to pass gft to inverse function)
+	// get the gft as a linear array - used to pass gft to inverse function)
 	gft = ngft_makeGftArray(partitions);
+
+	// done with partitions
 	ngft_FreeFreqPartitions(partitions);
 
 	/* allocate space for R structures and copy output */
@@ -158,40 +160,47 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 
 DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 																			 SEXP eps_d, SEXP ptype_s, SEXP wtype_s,
-																			 SEXP fw_width_i, SEXP edo_f_ref_i, SEXP edo_ndiv_i)
+																			 SEXP fw_width_i, SEXP edo_f_ref_i, SEXP edo_ndiv_i,
+																			 SEXP inv_type_s)
 {
 	int ii, pcnt = 0;
 	DCMPLX *dst;
 	DCLIST *gft, *cts;
 	FPCOL *partitions;
-	Rcomplex *ctp_r;
+	Rcomplex *ctp;
 	SEXP cts_c;
 	SEXP ret_l, names_s;
 	SEXP epsilon_d;
-	SEXP part_name_s, win_name_s;
+	SEXP part_name_s, win_name_s, inv_name_s;
 	SEXP fw_w_i, edo_fref_i, edo_nd_i;
 
 	Rcomplex *gft_r = COMPLEX(gft_c);
 	int dst_len = length(gft_c);
 	int ts_len = asInteger(ts_len_i) == NA_INTEGER ? -1 : INTEGER(ts_len_i)[0];
 	double dt = ! R_FINITE(asReal(dt_d)) ? .005 : REAL(dt_d)[0];
-	double epsilon = ! R_FINITE(asReal(eps_d)) ? 0 : REAL(dt_d)[0];
+	double epsilon = ! R_FINITE(asReal(eps_d)) ? 0 : REAL(eps_d)[0];
 	FreqPartitionType ptype = asChar(ptype_s) == NA_STRING ? FP_DYADIC :
 		strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "d", 1) == 0 ? FP_DYADIC : /* Dyadic */
+		strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "e", 1) == 0 ? FP_EDO : /* Equal division of the octave */
+		strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "f", 1) == 0 ? FP_FW : /* Fixed width */
 		FP_DYADIC; /* silently ignore anything else, and use Dyadic */
 	FreqWindowType wtype = asChar(wtype_s) == NA_STRING ? FWT_GAUSSIAN :
 		strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "g", 1) == 0 ? FWT_GAUSSIAN : /* Gaussian */
+		strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "b", 1) == 0 ? FWT_BOX : /* Box */
 		FWT_GAUSSIAN; /* silently ignore anything else, and use Gaussian */
 	int fw_width = asInteger(fw_width_i) == NA_INTEGER ? -1 : INTEGER(fw_width_i)[0];
 	int edo_f_ref = asInteger(edo_f_ref_i) == NA_INTEGER ? -1 : INTEGER(edo_f_ref_i)[0];
 	int edo_nd = asInteger(edo_ndiv_i) == NA_INTEGER ? -1 : INTEGER(edo_ndiv_i)[0];
+	InverseType itype = asChar(inv_type_s) == NA_STRING ? INV_DYADIC :
+		strncasecmp(CHAR(STRING_ELT(inv_type_s,0)), "d", 1) == 0 ? INV_DYADIC : /* Dyadic */
+		strncasecmp(CHAR(STRING_ELT(inv_type_s,0)), "f", 1) == 0 ? INV_FREQ : /* Frequency-based */
+		strncasecmp(CHAR(STRING_ELT(inv_type_s,0)), "t", 1) == 0 ? INV_TIME : /* Time-based */
+		INV_DYADIC; /* silently ignore anything else, and use Dyadic */
 
 	if ( dst_len < 3 || ts_len < 3 )
-		error("S-transform and original time series must have at least 3 points");
+		error("S-transform of original time series must have at least 3 points");
 	if ( dt <= 0 )
 		error("dt must be positive");
-
-	/* initialize */
 
 	// create partitions
 	partitions = ngft_FrequencyPartitions(ts_len, epsilon, ptype, wtype, fw_width, edo_f_ref, edo_nd);
@@ -207,18 +216,25 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	gft->count = dst_len;
 	gft->values = dst;
 	ngft_unpackGftArray(gft, partitions);
+
+	// done with gft
 	freeDClist(gft); // also frees space pointed to by dst
 
 	// Call 1D GFT Inverse Function
-	cts = ngft_1dComplex64Inv(partitions);
+	if ( itype == INV_DYADIC )
+		cts = ngft_1dComplex64Inv(partitions);
+	else
+		cts = ngft_1dComplex64Inv_Std(partitions,itype);
+
+	// done with partitions
 	ngft_FreeFreqPartitions(partitions);
 
 	/* allocate space for R structures for complex time series, and copy inv_gft output */
 	cts_c = PROTECT(allocVector(CPLXSXP, cts->count)); pcnt++;
-	ctp_r = COMPLEX(cts_c);
+	ctp = COMPLEX(cts_c);
 	for ( ii = 0 ; ii < cts->count ; ii++ ) {
-		ctp_r[ii].r = cts->values[ii].r;
-		ctp_r[ii].i = cts->values[ii].i;
+		ctp[ii].r = cts->values[ii].r;
+		ctp[ii].i = cts->values[ii].i;
 	}
 	freeDClist(cts);
 
@@ -228,18 +244,23 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	SET_STRING_ELT(part_name_s, 0,
 								 mkChar(ptype == FP_DYADIC ? "Dyadic" :
 								 ptype == FP_EDO ? "EDO" : 
-								 ptype == FP_FW ? "Fixed" :"Unknown"));
+								 ptype == FP_FW ? "Fixed" : "Unknown"));
 	win_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(win_name_s, 0,
 								 mkChar(wtype == FWT_GAUSSIAN ? "Gaussian" :
 								 wtype == FWT_BOX ? "Box" : "Unknown"));
-	fw_w_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = fw_width;
-	edo_fref_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_f_ref;
-	edo_nd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(ts_len_i)[0] = edo_nd;
+	fw_w_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(fw_w_i)[0] = fw_width;
+	edo_fref_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(edo_fref_i)[0] = edo_f_ref;
+	edo_nd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(edo_nd_i)[0] = edo_nd;
+	inv_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
+	SET_STRING_ELT(inv_name_s, 0,
+								 mkChar(itype == INV_DYADIC ? "Dyadic" :
+								 itype == INV_FREQ ? "Frequency" : 
+								 itype == INV_TIME ? "Time" :"Unknown"));
 
 	/* put the return values into a list */
-	ret_l = PROTECT(allocVector(VECSXP, 7)); pcnt++;
-	names_s = PROTECT(allocVector(VECSXP, 7)); pcnt++;
+	ret_l = PROTECT(allocVector(VECSXP, 8)); pcnt++;
+	names_s = PROTECT(allocVector(VECSXP, 8)); pcnt++;
 	SET_VECTOR_ELT(ret_l, 0, cts_c); SET_VECTOR_ELT(names_s, 0, mkChar("TS"));
 	SET_VECTOR_ELT(ret_l, 1, epsilon_d); SET_VECTOR_ELT(names_s, 1, mkChar("eps"));
 	SET_VECTOR_ELT(ret_l, 2, part_name_s); SET_VECTOR_ELT(names_s, 2, mkChar("part.type"));
@@ -247,6 +268,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	SET_VECTOR_ELT(ret_l, 4, fw_w_i); SET_VECTOR_ELT(names_s, 4, mkChar("fw.width"));
 	SET_VECTOR_ELT(ret_l, 5, edo_fref_i); SET_VECTOR_ELT(names_s, 5, mkChar("edo.fref"));
 	SET_VECTOR_ELT(ret_l, 6, edo_nd_i); SET_VECTOR_ELT(names_s, 6, mkChar("edo.nd"));
+	SET_VECTOR_ELT(ret_l, 7, inv_name_s); SET_VECTOR_ELT(names_s, 7, mkChar("inv.type"));
 	setAttrib(ret_l, R_NamesSymbol, names_s);
 
 	UNPROTECT(pcnt);

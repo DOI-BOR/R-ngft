@@ -108,6 +108,8 @@ typedef struct {
 typedef enum { FP_UNKNOWN = 0, FP_DYADIC, FP_EDO, FP_FW } FreqPartitionType;
 // enum defining window types
 typedef enum { FWT_UNKNOWN = 0, FWT_GAUSSIAN, FWT_BOX } FreqWindowType;
+// enum defining inverse types
+typedef enum { INV_UNKNOWN = 0, INV_FREQ, INV_TIME, INV_DYADIC } InverseType;
 
 // structure defining a collection of frequency partitions
 typedef struct {

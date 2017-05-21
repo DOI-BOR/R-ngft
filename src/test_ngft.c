@@ -190,9 +190,9 @@ int main( int argc, char **argv ) {
 		if ( inv_method == 0 )
 			cts = ngft_1dComplex64Inv(partitions);
 		else if ( inv_method == 1 )
-			cts = ngft_1dComplex64Inv_I(partitions);
+			cts = ngft_1dComplex64Inv_Std(partitions, INV_FREQ);
 		else if ( inv_method == 2 )
-			cts = ngft_1dComplex64Inv_II(partitions);
+			cts = ngft_1dComplex64Inv_Std(partitions, INV_TIME);
 		else
 			oops(progname, "Argument exception: unknown inverse method");
 		fprintf( outfile, "# INV: Re(z)         Im(z)            |z|\n" );
