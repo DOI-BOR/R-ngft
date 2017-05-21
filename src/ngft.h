@@ -7,17 +7,9 @@
  *  The New GFT Framework
  *
  *	Written by Chris Wood on 2/1/2017
- *	This software is a reimplementation of the GFT framework
- *	library by Robert Brown et al (2008). The interface for
- *	this new implementation is incompatible with the original GFT.
- *
- *  --- Original copyright notice from the GFT Framework is below
- *  >	Created by Robert Brown on 30/05/08.
- *	>	This software is copyright © 2010 UTI Limited Partnership.
- *	>	The original authors are Robert A. Brown, M. Louis Lauzon
- *	>	and Richard Frayne.  This software is licensed in the terms
- *	>	set forth in the “FST License Notice.txt” file, which is
- *	>	included in the LICENSE directory of this distribution.
+ *	This software is a complete reimplementation of the GFT framework
+ *	library by Robert Brown et al (2008). The interface for this
+ *	new implementation is incompatible with the original GFT.
  *
  */
 

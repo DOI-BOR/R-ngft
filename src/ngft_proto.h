@@ -16,6 +16,8 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 																	int W, int f_ref, int T);
 DllExport DCLIST *ngft_makeGftArray(FPCOL *fpcol);
 DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol );
+DllExport DCLIST *ngft_1dComplex64Inv_I(FPCOL *fpcol);
+DllExport DCLIST *ngft_1dComplex64Inv_II(FPCOL *fpcol);
 
 #ifdef IS_PORTED
 // 2D GFT Functions
