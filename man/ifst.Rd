@@ -39,6 +39,14 @@ Default is 10.}
 
 \item{edo.nd}{Sets the number of divisions per octave if \code{part.type} is
 \code{EDO}. Default is 5.}
+
+\item{inv.type}{\describe{
+\item{Dyadic}{\code{c("dy","Dyadic", "d")}}
+\item{Frequency-based DST}{\code{c("F","Frequency", "f")}}
+\item{Time-based DST}{\code{c("T","Time", "t")}}
+}
+Characters are case-insensitive, and only need to uniquely
+define the option. Default is \code{Dyadic}.}
 }
 \value{
 A list including the complex time series of the data, and

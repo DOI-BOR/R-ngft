@@ -26,6 +26,13 @@
 #' \code{EDO}. Default is \code{length(xt) / 2}.
 #' @param edo.nd Sets the number of divisions per octave if \code{part.type} is
 #' \code{EDO}. Default is 5.
+#' @param inv.type \describe{
+#' \item{Dyadic}{\code{c("dy","Dyadic", "d")}}
+#' \item{Frequency-based DST}{\code{c("F","Frequency", "f")}}
+#' \item{Time-based DST}{\code{c("T","Time", "t")}}
+#' }
+#' Characters are case-insensitive, and only need to uniquely
+#' define the option. Default is \code{Dyadic}.
 #' @return A list including the complex time series of the data, and
 #' the window type used.
 #' @details If Gaussian windows are selected, the results are discrete S-transforms.
@@ -48,17 +55,18 @@
 #' }
 #' @keywords ts
 ifst <- function(dst, ts_len, dt=0.01, eps=0.0, win.type=NA, part.type=NA,
-                 fw.width=NA, edo.fref=NA, edo.nd=NA) {
+                 fw.width=NA, edo.fref=NA, edo.nd=NA, inv.type=NA) {
 
-  xt <- as.double(xt[!is.na(xt)])
-  len <- length(xt)
+  dst <- as.complex(dst[!is.na(dst)])
+  len <- length(dst)
   if ( len < 3 )
-    stop("input time series must have at least 3 valid points")
+    stop("input dst must have at least 3 valid points")
 
   # call C function
   out <- .Call("CALLngft_1dComplex64Inv",
-               as.complex(gft), as.integer(ts_len), as.double(dt),
+               as.complex(dst), as.integer(ts_len), as.double(dt),
                as.double(eps), as.character(part.type), as.character(win.type),
-               as.integer(fw.width), as.integer(edo.fref), as.integer(edo.nd))
+               as.integer(fw.width), as.integer(edo.fref), as.integer(edo.nd),
+               as.character(inv.type))
   return(out)
 }

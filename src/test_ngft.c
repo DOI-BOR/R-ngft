@@ -55,7 +55,7 @@ int main( int argc, char **argv ) {
 	FILE *infile = stdin, *outfile = stdout;
 	BOOL do_inverse = FALSE, do_image = FALSE, gaussian_window = TRUE;
 	BOOL by_part = TRUE, all_freqs = FALSE;
-	int stride = 1, image_dim = -1, fw_width = -1, edo_fref = -1, edo_nd = -1;
+	int stride = 1, inv_method = 0, image_dim = -1, fw_width = -1, edo_fref = -1, edo_nd = -1;
 	FPCOL *partitions;
 	FreqPartitionType ptype = FP_DYADIC;
 	FreqWindowType wtype = FWT_GAUSSIAN;
@@ -67,11 +67,13 @@ int main( int argc, char **argv ) {
 			switch ( *(*argv + 1) ) {
 				case 'h':
 				case 'H':
-					fprintf( stdout, "USAGE: %s [-h|-H] [-i] [-I] [-a] [-A] [-M dim] [-e eps]\n\t\t[-p ptype] [-w wtype] [-W fw_width] [-f edo_fref] [-n edo_nd]\n\t\t[-o outfile] [infile]\n", progname );
+					fprintf( stdout, "USAGE: %s [-h|-H] [-i[12]] [-I] [-a] [-A] [-M dim] [-e eps]\n\t\t[-p ptype] [-w wtype] [-W fw_width] [-f edo_fref] [-n edo_nd]\n\t\t[-o outfile] [infile]\n", progname );
 					break;
 				case 'i': // do inverse
 					do_inverse = TRUE;
 					do_image = FALSE;
+					if ( *(*argv + 2) != '\0' )
+						inv_method = atoi(*argv + 2);
 					break;
 				case 'I':	// output image
 					if ( ! do_inverse )
@@ -185,7 +187,14 @@ int main( int argc, char **argv ) {
 		gft->values = data_in;
 		ngft_unpackGftArray(gft, partitions);
 		freeDClist(gft); // also frees space pointed to by data_in
-		cts = ngft_1dComplex64Inv(partitions);
+		if ( inv_method == 0 )
+			cts = ngft_1dComplex64Inv(partitions);
+		else if ( inv_method == 1 )
+			cts = ngft_1dComplex64Inv_Std(partitions, INV_FREQ);
+		else if ( inv_method == 2 )
+			cts = ngft_1dComplex64Inv_Std(partitions, INV_TIME);
+		else
+			oops(progname, "Argument exception: unknown inverse method");
 		fprintf( outfile, "# INV: Re(z)         Im(z)            |z|\n" );
 		for ( ii = 0 ; ii < cts->count ; ii++ )
 			fprintf( outfile, "%15.8e %15.8e\t %14.8e\n",

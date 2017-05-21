@@ -3,18 +3,9 @@
  *  The New GFT Framework
  *
  *	Written by Chris Wood on 2/1/2017
- *	This software is a reimplementation of the GFT framework
- *	library by Robert Brown et al (2008). The interface for
- *	this new implementation is incompatible with the original GFT.
- *
- *  --- Original copyright notice from the GFT Framework is below
- *  >	Created by Robert Brown on 30/05/08.
- *	>	This software is copyright © 2010 UTI Limited Partnership.
- *	>	The original authors are Robert A. Brown, M. Louis Lauzon
- *	>	and Richard Frayne.  This software is licensed in the terms
- *	>	set forth in the “FST License Notice.txt” file, which is
- *	>	included in the LICENSE directory of this distribution.
- *
+ *	This software is a complete reimplementation of the GFT framework
+ *	library by Robert Brown et al (2008). The interface for this
+ *	new implementation is incompatible with the original GFT.
  */
 
 #include "ngft.h"
@@ -24,31 +15,6 @@
 #  define DllImport DllExport
 # endif
 #include "ngft_proto.h"
-
-
-// fftw wrapper from original GFT library
-static void fft(int N, DCMPLX *in, int stride) {
-	fftw_plan p;
-	p = fftw_plan_many_dft(1, &N, 1, (fftw_complex *)in, NULL, stride, 0, (fftw_complex *)in,
-													NULL, stride, 0, FFTW_FORWARD, FFTW_ESTIMATE);
-	fftw_execute(p);
-	fftw_destroy_plan(p);
-}
-
-
-// fftw wrapper from original GFT library
-static void ifft(int N, DCMPLX *in, int stride) {
-	int ii;
-	fftw_plan p;
-	p = fftw_plan_many_dft(1, &N, 1, (fftw_complex *)in, NULL, stride, 0, (fftw_complex *)in,
-													NULL, stride, 0, FFTW_BACKWARD, FFTW_ESTIMATE);
-	fftw_execute(p);
-	fftw_destroy_plan(p);
-	for ( ii = 0 ; ii < N ; ii++ ) {
-		in[ii*stride].r /= N;
-		in[ii*stride].i /= N;
-	}
-}
 
 
 // return the modulus of a DCMPLX value
@@ -80,6 +46,31 @@ static void cdiv(DCMPLX *x, DCMPLX *y) {
 static void cmulByReal(DCMPLX *x, double multiplier) {
 	x->r *= multiplier;
 	x->i *= multiplier;
+}
+
+
+// fftw wrapper for forward FFT.
+static void fwd_fft(DCMPLX *signal, int N) {
+	fftw_complex *cdata = (fftw_complex *)signal;
+	// make the plan for an in-place forward FFT - assume input is untouched by using FFTW_ESTIMATE
+	fftw_plan p = fftw_plan_dft_1d(N, cdata, cdata, FFTW_FORWARD, FFTW_ESTIMATE);
+	fftw_execute(p);  // Note: Fftw uses standard in-order output ordering, and no normalization
+	fftw_destroy_plan(p);
+}
+
+
+// fftw wrapper for inverse FFT
+static void inv_fft(DCMPLX *signal, int N) {
+	int ii;
+	double norm = 1. / N;
+	fftw_complex *cdata = (fftw_complex *)signal;
+	// make the plan for an in-place inverse FFT - assume input is untouched by using FFTW_ESTIMATE
+	fftw_plan p = fftw_plan_dft_1d(N, cdata, cdata, FFTW_BACKWARD, FFTW_ESTIMATE);
+	fftw_execute(p);  // Note: Fftw uses standard in-order output ordering, and no normalization
+	fftw_destroy_plan(p);
+	// normalize the inverse FFT
+	for ( ii = 0 ; ii < N ; ii++ )
+		cmulByReal(signal + ii, norm);
 }
 
 
@@ -182,7 +173,7 @@ static DCMPLX *gaussian_dft(int N, int freq) {
 
 	// take the DFT of the 0-centered, time-domain Gaussian
 	// Note: FT of a real, even function is also a real, even function. But, see notes below
-	fft(N,win,1);
+	fwd_fft(win, N);
 
 	// Note: If N is odd, then index 0 will be exactly at time 0, and the imaginary part
 	// of the DFT output will be about 1e-14 less than the real, as expected.
@@ -252,27 +243,22 @@ static DCMPLX *box_dft(int N, int freq) {
 }
 
 
-// conversion between indicies defining the start, center, and end of windows. The mapping
-// between centers and endpoints is 1-1 for non-overlapping windows, and cases where the
-// width is odd. For even width, and overlapping windows, there are ambiguities at the 0 and
-// midpoint frequency.
+// For standard in-order output ordering, these utilities convert between indicies defining
+// the start, center, and end of windows. The mapping between centers and endpoints is 1-1 for
+// non-overlapping windows, and cases where the width is odd. For even width, and overlapping
+// windows, there are ambiguities at the 0 and midpoint frequency.
 
-static int shift_left(int idx, BOOL is_f, int N) {
-	// for frequency indicies, left_bias for positive frequencies implies right_bias for negative frequencies,
-	// if the windows are to be symmetric between positive and negative frequencies.
-	return is_f ? idx <= N / 2 : TRUE;
-}
 static int start_2_center(int start, int width, BOOL is_f, int N) {
 	int center = start + width / 2;
 
 	// Note: there is ambiguity in which center to return for the cases where width is even,
 	// and the true center is between the most positive and negative frequencies. However,
-	// that case should not occur in this code. But, bomb if it does
+	// that case should not occur in this code.
 	if ( is_f && IS_EVEN(width) && center == N / 2 + 1 )
 		oops("start_2_center", "application exception: indeterminate center");
 
-	if ( IS_EVEN(width) && shift_left(center, is_f, N) )
-		center -= 1;
+	if ( IS_EVEN(width) && ( ! is_f || start > N / 2 ) )
+		center -= 1;	// best results with left-bias for time-windows, right-bias for partitions
 	center %= N;
 	if ( center < 0 )
 		center += N;
@@ -280,9 +266,7 @@ static int start_2_center(int start, int width, BOOL is_f, int N) {
 }
 static int center_2_start(int center, int width, BOOL is_f, int N) {
 	int start = center - width / 2;
-	// Note: for even width, there is ambiguity for the case of true center = +/- 1/2 (center = 0),
-	// but taking the +1/2 case allows glossing over it for this code
-	if ( IS_EVEN(width) && shift_left(center, is_f, N) )
+	if ( IS_EVEN(width) )
 		start += 1;
 	start %= N;
 	if ( start < 0 )
@@ -291,10 +275,6 @@ static int center_2_start(int center, int width, BOOL is_f, int N) {
 }
 static int center_2_end(int center, int width, BOOL is_f, int N) {
 	int end = center + width / 2;
-	// Note: for even width, there is ambiguity for the case of true center = +/- 1/2 (center = 0),
-	// but taking the +1/2 case allow glossing over it for this code
-	if ( IS_EVEN(width) && ! shift_left(center, is_f, N) )
-		end -= 1;
 	end %= N;
 	if ( end < 0 )
 		end += N;
@@ -478,7 +458,7 @@ static void add_freq_partition(FPART **ppart, int *pcount, int fs, int fe, int N
 }
 
 
-// frequency-partition comparator for sorting on increasing start frequency.
+// frequency-partition comparator for sorting on increasing start-frequency index.
 static int part_cmp(const void* vp1, const void* vp2) {
 	const FPART *p1 = vp1, *p2 = vp2;
 	return p1->start - p2->start;
@@ -625,7 +605,7 @@ static FPCOL *edoPartitions(int N, double epsilon, int f_ref, int T) {
 
 // Fixed width partitioning
 // The underlying partitions remain unchanged, and never overlap, regardless of epsilon.
-// Note: f_ref and T can be set <= 0 to use default values
+// Note: W can be set <= 0 to use default values
 static FPCOL *fwPartitions(int N, double epsilon, int W) {
 	int fe_prev, pcount, n_pcount, fixed_width;
 	FPART *partitions, *n_partitions;
@@ -762,31 +742,28 @@ DllExport void ngft_FreeFreqPartitions(FPCOL *pars) {
 }
 
 
-// get shifted DFT of N-length time-domain window function. Shift is such that
-// f = 0 of the original window is shifted to fcenter (which may be positive or negative)
-static DCMPLX *getWindowDFT(int fcenter, int width, int N, windowFunction *window_fn) {
-	DCMPLX *win;
+// get N-length time-domain window function centered about f=0
+static DCMPLX *getWindowDFT(int fcenter, int width, int N, FreqWindowType wtype) {
+	DCMPLX *win = NULL;
 
 	// get the N-length FT of the time window, centered about 0
-	if ( width < 1 ) { // error: width must be >= 1
-		oops( "getWindowDFT", "Application Error: width < 1" );
+	if ( width < 1 || fcenter == 0) { // error: width must be >= 1
+		oops( "getWindowDFT", "Application Error: width < 1 or fcenter = 0" );
 	} else if ( width == 1 ) { // length-1 windows are always the same
 		win = calloc( N, sizeof( *win ) );
 		win[0].r = 1;
-	} else { // width > 1
-		if ( fcenter == 0 ) {
-			// sigma-t is infinite in this case, so the Gaussian is ill-defined. Just make it a delta function at 0
-			int ii;
-			win = calloc( N, sizeof( *win ) );
-			win[0].r = 1;
-		} else {
-			// get DFT of time-domain window of length N, centered on freq=0
-			win = window_fn(N, fcenter);
-		}
-	}
+	} else {
+		// for width > 1, get DFT of time-domain window of length N, centered on freq=0
+		windowFunction *window_fn = NULL;
+		if ( wtype == FWT_GAUSSIAN )
+			window_fn = gaussian_dft;
+		else if ( wtype == FWT_BOX )
+			window_fn = box_dft;
+		else
+			oops("getWindowDFT", "Invalid argument: unknown frequency-window type");
 
-	// right-shift DFT of window so that original 0-frequency index is moved to fcenter (positive or negative)
-	shift(win, N, FREQ_2_INDEX(fcenter,N));
+		win = window_fn(N, fcenter);
+	}
 
 	return win; // length is N
 }
@@ -795,8 +772,7 @@ static DCMPLX *getWindowDFT(int fcenter, int width, int N, windowFunction *windo
 // take fast discrete transform of a complex double 1D signal
 DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType ptype, FreqWindowType wtype,
 																	int W, int f_ref, int T) {
-	int ii, N, stride = 1;
-	windowFunction *window_fn = NULL;
+	int ii, N;
 	FPCOL *fpcol;
 	DCMPLX *signal;
 
@@ -805,47 +781,75 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 	signal = sig->values;
 	N = sig->count;
 
+	// create frequency and time partitions
 	fpcol = ngft_FrequencyPartitions( N, epsilon, ptype, wtype, W, f_ref, T );
 
-	if ( fpcol->window_type == FWT_GAUSSIAN )
-		window_fn = gaussian_dft;
-	else if ( fpcol->window_type == FWT_BOX )
-		window_fn = box_dft;
-	else
-		oops("ngft_1dComplex64", "Invalid argument: unknown frequency-window type");
+	// get the DFT of the signal, overwriting input. Result is length N, standard in-order frequency ordering
+	fwd_fft(signal, N);
 
-	// get the spectrum of the signal (warning: overwrites input array). Result is length N, centered on freq=0
-	fft(N, signal, stride);
+#ifdef CMPLX64_I_DEBUG
+	if ( W == 1 ) {
+		fprintf(stderr, "# FFT:      Re(z)         Im(z)            |z|\n");
+		for ( ii = 0 ; ii < N ; ii++ )
+			fprintf(stderr, "%4d: %15.8e %15.8e\t %14.8e\n",
+							INDEX_2_FREQ(ii, N), signal[ii].r, signal[ii].i, modulus(signal + ii));
+		fprintf(stderr, "\n# FFT-INV:  Re(z)         Im(z)            |z|\n");
+	}
+#endif
 
 	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets. Ordering doesn't matter
+	// frequency partition sets
 	for ( ii = 0 ; ii < 2 ; ii++ ) {
 		int jj;
 		FPSET *fpset = fpcol->fpset + ii;
 		// loop over the partitions in this set
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			int kk;
-			DCMPLX *win, *dst;
-			DCLIST* gft;
+			DCMPLX *win, *dst, sum;
+			DCLIST *gft;
 			FPART *partition = fpset->partitions + jj;
 			int fcenter = INDEX_2_FREQ(partition->center, N);	// need actual frequency, not index
 			int win_start = partition->win_start;
 			int win_len = partition->win_len;
 
-			// get DFT of N-length time-domain window function for this center frequency, 0-index shifted to f-center
-			win = getWindowDFT(fcenter, win_len, N, window_fn); // length is N
+			dst = calloc(win_len, sizeof(*dst));
+			if ( fcenter == 0 ) {
+				// handle zero-frequency partition as a special case
+				for ( kk = 0 ; kk < win_len ; kk++ )
+					dst[kk].r = signal[0].r / N;	// by definition, S(f=0,t) = mean / N
+			} else {
+				// get DFT of N-length time-domain window function for this center frequency, centered on 0
+				win = getWindowDFT(fcenter, win_len, N, fpcol->window_type); // length is N
 
-			// make DST and apply the window to the spectrum
-			dst = calloc( win_len, sizeof( *dst ) );
-			for ( kk = 0 ; kk < win_len ; kk++ ) {
-				int f_idx = (win_start + kk) % N; // get frequency index, handling wrap-around
-				dst[kk] = signal[f_idx];	// copy and shift the signal FFT (0-index is at the window start)
-				cmul( dst + kk, win + f_idx );	// apply the window
+				// right-shift DFT of window by fcenter
+				shift(win, N, fcenter);
+
+				for ( kk = 0 ; kk < win_len ; kk++ ) {
+					int f_idx = (win_start + kk) % N; // get frequency index, handling wrap-around
+					dst[kk] = signal[f_idx];	// make a copy of the DFT of the signal over the window
+					cmul(dst + kk, win + f_idx);	// apply the window
+				}
+				free(win);	// done with window
+
+				// left-shift by win_len/2 to center at 0. Note: actually need -W/2+1 for even W,
+				// and -W/2 for odd W, which is equivalent to right-shifting W/2+1 for even or odd W.
+				if ( win_len > 1 )
+					shift(dst, win_len, win_len/2 + 1);
+
+				// inverse FFT the windowed and transformed data to get this row of S-space
+				inv_fft(dst, win_len);
 			}
-			free( win );	// done with window
 
-			// inverse FFT the windowed and transformed data to get this row of S-space
-			ifft( win_len, dst, stride );
+#ifdef CMPLX64_I_DEBUG
+			if ( W == 1 ) {
+				for ( sum.r = 0, sum.i = 0, kk = 0 ; kk < win_len ; kk++ ) {
+					sum.r += dst[kk].r;
+					sum.i += dst[kk].i;
+				}
+				fprintf(stderr, "%4d: %15.8e %15.8e\t %14.8e\n",
+								fcenter, sum.r, sum.i, modulus(&sum));
+			}
+#endif
 
 			// save this row of the S-transform.
 			gft = calloc(1, sizeof(*gft));
@@ -924,8 +928,7 @@ DllExport void ngft_unpackGftArray(DCLIST *gft, FPCOL *fpcol) {
 
 // take inverse fast discrete transform of a complex DST
 DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
-	int ii, N, stride = 1;
-	windowFunction *window_fn = NULL;
+	int ii, N;
 	DCMPLX *signal;
 	DCLIST *sig;
 
@@ -933,18 +936,11 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 		oops( "ngft_1dComplex64Inv", "Invalid argument: fpcol is null" );
 	N = fpcol->N;
 
-	if ( fpcol->window_type == FWT_GAUSSIAN )
-		window_fn = gaussian_dft;
-	else if ( fpcol->window_type == FWT_BOX )
-		window_fn = box_dft;
-	else
-		oops("ngft_1dComplex64Inv", "Invalid argument: unknown frequency-window type");
-
 	// create initialized space for signal
 	signal = calloc( N, sizeof( *signal ) );
 
 	// loop over the non-negative (index 0) and the negative (index 1)
-	// frequency partition sets. Ordering doesn't matter
+	// frequency partition sets
 	for ( ii = 0 ; ii < 2 ; ii++ ) {
 		int jj;
 		FPSET *fpset = fpcol->fpset + ii;
@@ -959,31 +955,44 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 			int start = partition->start;
 			int end = partition->end;
 
-			// make a copy of this partition's part of the S-transform, so as not to modify original
-			dst_copy = calloc( win_len, sizeof( *dst_copy ) );
-			memcpy(dst_copy, partition->gft->values, partition->gft->count * sizeof(*dst_copy));
+			if ( fcenter == 0 ) {
+				// handle zero-frequency partition as a special case
+				signal[0].r = N * partition->gft->values[0].r; // by definition, H(0) = mean = N * S(f=0,t)
+			} else {
+				// make a copy of this partition's part of the S-transform, so as not to modify original
+				dst_copy = calloc( win_len, sizeof( *dst_copy ) );
+				memcpy(dst_copy, partition->gft->values, partition->gft->count * sizeof(*dst_copy));
 
-			// FFT this partition's part of the S-transform
-			fft(win_len, dst_copy, stride);
+				// FFT this partition's part of the S-transform
+				fwd_fft(dst_copy, win_len);
 
-			// get DFT of N-length time-domain window function for this center frequency
-			win = getWindowDFT(fcenter, win_len, N, window_fn); // length is N, original f=0 is centered on fcenter
+				// right-shift by win_len/2 to center at f-center. Note: actually need W/2-1 for even W,
+				// and W/2 for odd W, which is equivalent to left-shifting -W/2-1 for even or odd W.
+				if ( win_len > 1 )
+					shift(dst_copy, win_len, -win_len/2 - 1);
 
-			// remove partition window from the transformed dst
-			for ( kk = 0 ; kk < win_len ; kk++ ) {
-				int f_idx = (win_start + kk) % N; // get frequency index, handling wrap-around
-				cdiv( dst_copy + kk, win + f_idx );
-				// subset out those frequencies contained within the partition (drop overlapped points)
-				if ( start <= f_idx && f_idx <= end )
-					signal[f_idx] = dst_copy[kk];
+				// get DFT of N-length time-domain window function for this center frequency, centered on 0
+				win = getWindowDFT(fcenter, win_len, N, fpcol->window_type); // length is N
+
+				// right-shift DFT of window so that original 0-frequency index is moved to fcenter (positive or negative)
+				shift(win, N, FREQ_2_INDEX(fcenter,N));
+
+				// remove partition window from the transformed dst
+				for ( kk = 0 ; kk < win_len ; kk++ ) {
+					int f_idx = (win_start + kk) % N; // get frequency index, handling wrap-around
+					cdiv(dst_copy + kk, win + f_idx);
+					// subset out those frequencies contained within the partition (drop overlapped points)
+					if ( start <= f_idx && f_idx <= end )
+						signal[f_idx] = dst_copy[kk];
+				}
+				free( win );
+				free( dst_copy );
 			}
-			free( dst_copy );
-			free( win );
 		}
 	}
 
 	// inverse FFT to recover the signal
-	ifft(N, signal, stride);
+	inv_fft(signal, N);
 
 	// encapsulate signal into structure and return
 	sig = calloc(1, sizeof(*sig));
@@ -994,38 +1003,82 @@ DllExport DCLIST *ngft_1dComplex64Inv( FPCOL *fpcol ) {
 }
 
 
-#ifdef IS_PORTED
-// 2D transform, mostly following the original GFT code.
-// Need to write an inverse function to be useful for filtering applications
-// Need an explicit mapping between S-transform indices and image partitions(wavenumber and pixel)
-// This function compiles, but has not been tested by me (CKW)
-DllExport void ngft_2dComplex64(DCMPLX *image, int N, int M, windowFunction *window_fn) {
-	int row, col;
-	double epsilon = -1;
-	double f_ref = -1, T = -1, W = -1;
-	FPCOL *pars;
+// take inverse fast discrete transform of a complex N x N DST using
+// standard integral methods
+DllExport DCLIST *ngft_1dComplex64Inv_Std( FPCOL *fpcol, InverseType itype ) {
+	int N;
+	DCMPLX *signal;
+	DCLIST *sig;
 
-	if ( image == NULL || N <= 0 || M <= 0 )
-		oops( "ngft_2dComplex64", "Invalid argument: image is NULL or N <= 0 or M <= 0" );
-	if ( window_fn == NULL )
-		window_fn = gaussian;
+	if ( fpcol == NULL )
+		oops( "ngft_1dComplex64Inv_Std", "Invalid argument: fpcol is null" );
+	if ( fpcol->partition_type != FP_FW && fpcol->fw_width != 1 )
+		oops( "ngft_1dComplex64Inv_Std", "Invalid argument: only available for fixed-width partitions of width 1" );
+	if ( itype != INV_FREQ && itype != INV_TIME )
+		oops( "ngft_1dComplex64Inv_Std", "Invalid argument: itype must be either INV_FREQ or INV_TIME" );
 
-	pars = ngft_FrequencyPartitions(N, epsilon);
+	N = fpcol->N;
 
-	for ( row = 0 ; row < N ; row++ )
-		ngft_1dComplex64(image + row * N, N, pars, window_fn, 1);
+	// create initialized space for signal
+	signal = calloc( N, sizeof( *signal ) );
 
-	if ( M != N ) {
-		free( pars );
-		pars = ngft_FrequencyPartitions(M, epsilon);
+	if ( itype == INV_FREQ ) {
+		// use standard method of time-integration of ST, and then inverse FFT
+		int ii;
+		for ( ii = 0 ; ii < 2 ; ii++ ) {
+			int jj;
+			FPSET *fpset = fpcol->fpset + ii;
+			// loop over the frequency partitions in this set
+			for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
+				int kk;
+				FPART *fpart = fpset->partitions + jj;
+				int f_idx = fpart->center;	// note: equal to jj only for positive frequencies
+				// integrate over time the gft at this frequency
+				for ( kk = 0 ; kk < fpart->gft->count ; kk++ ) {
+					signal[f_idx].r += fpart->gft->values[kk].r;
+					signal[f_idx].i += fpart->gft->values[kk].i;
+				}
+			}
+		}
+		// inverse FFT to recover the signal
+		inv_fft(signal, N);
+	} else if ( itype == INV_TIME ) {
+		// take inverse fast discrete transform of a complex N x N DST using
+		// the time-localization method of Schimmel and Gallart (2005)
+		int tt;
+		double fscale = 2 * M_PI / N;
+		// get the N x N S-transform array
+		DCLIST *st = ngft_makeGftArray(fpcol);
+		if ( st->count != N * N )
+			oops("ngft_1dComplex64Inv_Std", "Program exception: S-transform count != N^2");
+		// loop over time
+		for ( tt = 0 ; tt < N ; tt++ ) {
+			int f_idx;
+			// Integrate over frequency for this time. Skip ff = 0 for now. TODO: handle the ff=0 case
+			for ( f_idx = 1 ; f_idx < N ; f_idx++ ) {
+				int ff = INDEX_2_FREQ(f_idx, N);
+				DCMPLX cexp = {cos(ff * tt * fscale), sin(ff * tt * fscale)};
+				int st_idx = f_idx * N + tt;	// get index into st array for this time and frequency
+				DCMPLX st_val = st->values[st_idx];
+				cmulByReal(&st_val, 1. / ABS(ff));	// divide by |f|.
+				cmul(&st_val , &cexp);	// multiply by complex exponent for this frequency and time
+																// add result to sum for this time
+				signal[tt].r += st_val.r;
+				signal[tt].i += st_val.i;
+			}
+			// need to scale frequency integral by factor of sqrt(2*pi)
+			cmulByReal(signal + tt, sqrt(2 * M_PI));
+		}
+		freeDClist(st);
 	}
 
-	for ( col = 0 ; col < M ; col++ )
-		ngft_1dComplex64(image + col, M, pars, window_fn, N);
+	// encapsulate signal into structure and return
+	sig = calloc(1, sizeof(*sig));
+	sig->values = signal;
+	sig->count = N;
 
-	free( pars );
+	return sig;
 }
-#endif
 
 
 // free an ILIST structure
