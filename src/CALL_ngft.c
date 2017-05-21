@@ -175,12 +175,15 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	int dst_len = length(gft_c);
 	int ts_len = asInteger(ts_len_i) == NA_INTEGER ? -1 : INTEGER(ts_len_i)[0];
 	double dt = ! R_FINITE(asReal(dt_d)) ? .005 : REAL(dt_d)[0];
-	double epsilon = ! R_FINITE(asReal(eps_d)) ? 0 : REAL(dt_d)[0];
+	double epsilon = ! R_FINITE(asReal(eps_d)) ? 0 : REAL(eps_d)[0];
 	FreqPartitionType ptype = asChar(ptype_s) == NA_STRING ? FP_DYADIC :
 		strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "d", 1) == 0 ? FP_DYADIC : /* Dyadic */
+		strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "e", 1) == 0 ? FP_EDO : /* Equal division of the octave */
+		strncasecmp(CHAR(STRING_ELT(ptype_s,0)), "f", 1) == 0 ? FP_FW : /* Fixed width */
 		FP_DYADIC; /* silently ignore anything else, and use Dyadic */
 	FreqWindowType wtype = asChar(wtype_s) == NA_STRING ? FWT_GAUSSIAN :
 		strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "g", 1) == 0 ? FWT_GAUSSIAN : /* Gaussian */
+		strncasecmp(CHAR(STRING_ELT(wtype_s,0)), "b", 1) == 0 ? FWT_BOX : /* Box */
 		FWT_GAUSSIAN; /* silently ignore anything else, and use Gaussian */
 	int fw_width = asInteger(fw_width_i) == NA_INTEGER ? -1 : INTEGER(fw_width_i)[0];
 	int edo_f_ref = asInteger(edo_f_ref_i) == NA_INTEGER ? -1 : INTEGER(edo_f_ref_i)[0];
