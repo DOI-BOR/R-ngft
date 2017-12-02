@@ -9,7 +9,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 																		SEXP image_dim_i, SEXP by_part_l, SEXP all_freqs_l,
 																		SEXP fw_width_i, SEXP edo_f_ref_i, SEXP edo_ndiv_i)
 {
-	int ii, jj, pcnt = 0, nf, nt, *ip;
+	int ii, jj, pcnt = 0, nf, nt, *ip, *start;
 	DCMPLX *cts;
 	DCLIST *signal, *gft;
 	DIMAGE *image;
@@ -19,6 +19,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	SEXP deltat_d, epsilon_d;
 	SEXP part_name_s, win_name_s;
 	SEXP gft_c, cts_img_c;
+	SEXP start_i;
 	SEXP img_wd_i, img_ht_i;
 	SEXP freq_centers_i, time_centers_i;
 	SEXP ts_len_i;
@@ -70,6 +71,9 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	// get the gft as a linear array - used to pass gft to inverse function)
 	gft = ngft_makeGftArray(partitions);
 
+	// get start indices into gft of positive and negative frequencies
+	start = ngft_getGftArrayIndices(partitions);
+
 	// done with partitions
 	ngft_FreeFreqPartitions(partitions);
 
@@ -83,6 +87,13 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 		ctp[ii].i = gft->values[ii].i;
 	}
 	freeDClist(gft);
+
+	// start indices into gft of positive and negative frequencies
+	start_i = PROTECT(allocVector(INTSXP, 2)); pcnt++;
+	ip = INTEGER( start_i );
+	for ( ii = 0 ; ii < 2 ; ii++ )
+	  ip[ii] = start[ii] + 1; // go from C's 0-indexing to R's 1-indexing
+	free(start);
 
 	// Image, with frequencies on the vertical axis and times on the horizontal axis
 	cts_img_c = PROTECT(allocMatrix(CPLXSXP, nf, nt)); pcnt++;
@@ -121,7 +132,7 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	part_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(part_name_s, 0,
 								 mkChar(ptype == FP_DYADIC ? "Dyadic" :
-												ptype == FP_EDO ? "EDO" : 
+												ptype == FP_EDO ? "EDO" :
 												ptype == FP_FW ? "Fixed" :"Unknown"));
 	win_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(win_name_s, 0,
@@ -132,24 +143,25 @@ DllExport SEXP CALLngft_1dComplex64(SEXP ts_d, SEXP dt_d, SEXP eps_d, SEXP ptype
 	edo_nd_i = PROTECT(allocVector(INTSXP, 1)); pcnt++; INTEGER(edo_nd_i)[0] = edo_nd;
 
 	/* put the return values into a list */
-	ret_l = PROTECT(allocVector(VECSXP, 16)); pcnt++;
-	names_s = PROTECT(allocVector(VECSXP, 16)); pcnt++;
+	ret_l = PROTECT(allocVector(VECSXP, 17)); pcnt++;
+	names_s = PROTECT(allocVector(VECSXP, 17)); pcnt++;
 	SET_VECTOR_ELT(ret_l, 0, ts_len_i); SET_VECTOR_ELT(names_s, 0, mkChar("ts.len"));
 	SET_VECTOR_ELT(ret_l, 1, deltat_d); SET_VECTOR_ELT(names_s, 1, mkChar("dt"));
 	SET_VECTOR_ELT(ret_l, 2, epsilon_d); SET_VECTOR_ELT(names_s, 2, mkChar("eps"));
 	SET_VECTOR_ELT(ret_l, 3, part_name_s); SET_VECTOR_ELT(names_s, 3, mkChar("part.type"));
 	SET_VECTOR_ELT(ret_l, 4, win_name_s); SET_VECTOR_ELT(names_s, 4, mkChar("win.type"));
 	SET_VECTOR_ELT(ret_l, 5, gft_c); SET_VECTOR_ELT(names_s, 5, mkChar("gft"));
-	SET_VECTOR_ELT(ret_l, 6, cts_img_c); SET_VECTOR_ELT(names_s, 6, mkChar("image"));
-	SET_VECTOR_ELT(ret_l, 7, img_wd_i); SET_VECTOR_ELT(names_s, 7, mkChar("wd"));
-	SET_VECTOR_ELT(ret_l, 8, img_ht_i); SET_VECTOR_ELT(names_s, 8, mkChar("ht"));
-	SET_VECTOR_ELT(ret_l, 9, freq_centers_i); SET_VECTOR_ELT(names_s, 9, mkChar("f.centers"));
-	SET_VECTOR_ELT(ret_l, 10, time_centers_i); SET_VECTOR_ELT(names_s, 10, mkChar("t.centers"));
-	SET_VECTOR_ELT(ret_l, 11, by_part_l); SET_VECTOR_ELT(names_s, 11, mkChar("by.partition"));
-	SET_VECTOR_ELT(ret_l, 12, all_freqs_l); SET_VECTOR_ELT(names_s, 12, mkChar("all.freqs"));
-	SET_VECTOR_ELT(ret_l, 13, fw_w_i); SET_VECTOR_ELT(names_s, 13, mkChar("fw.width"));
-	SET_VECTOR_ELT(ret_l, 14, edo_fref_i); SET_VECTOR_ELT(names_s, 14, mkChar("edo.fref"));
-	SET_VECTOR_ELT(ret_l, 15, edo_nd_i); SET_VECTOR_ELT(names_s, 15, mkChar("edo.nd"));
+	SET_VECTOR_ELT(ret_l, 6, start_i); SET_VECTOR_ELT(names_s, 6, mkChar("start.pos"));
+	SET_VECTOR_ELT(ret_l, 7, cts_img_c); SET_VECTOR_ELT(names_s, 7, mkChar("image"));
+	SET_VECTOR_ELT(ret_l, 8, img_wd_i); SET_VECTOR_ELT(names_s, 8, mkChar("wd"));
+	SET_VECTOR_ELT(ret_l, 9, img_ht_i); SET_VECTOR_ELT(names_s, 9, mkChar("ht"));
+	SET_VECTOR_ELT(ret_l, 10, freq_centers_i); SET_VECTOR_ELT(names_s, 10, mkChar("f.centers"));
+	SET_VECTOR_ELT(ret_l, 11, time_centers_i); SET_VECTOR_ELT(names_s, 11, mkChar("t.centers"));
+	SET_VECTOR_ELT(ret_l, 12, by_part_l); SET_VECTOR_ELT(names_s, 12, mkChar("by.partition"));
+	SET_VECTOR_ELT(ret_l, 13, all_freqs_l); SET_VECTOR_ELT(names_s, 13, mkChar("all.freqs"));
+	SET_VECTOR_ELT(ret_l, 14, fw_w_i); SET_VECTOR_ELT(names_s, 14, mkChar("fw.width"));
+	SET_VECTOR_ELT(ret_l, 15, edo_fref_i); SET_VECTOR_ELT(names_s, 15, mkChar("edo.fref"));
+	SET_VECTOR_ELT(ret_l, 16, edo_nd_i); SET_VECTOR_ELT(names_s, 16, mkChar("edo.nd"));
 	setAttrib(ret_l, R_NamesSymbol, names_s);
 
 	UNPROTECT(pcnt);
@@ -243,7 +255,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	part_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(part_name_s, 0,
 								 mkChar(ptype == FP_DYADIC ? "Dyadic" :
-								 ptype == FP_EDO ? "EDO" : 
+								 ptype == FP_EDO ? "EDO" :
 								 ptype == FP_FW ? "Fixed" : "Unknown"));
 	win_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(win_name_s, 0,
@@ -255,7 +267,7 @@ DllExport SEXP CALLngft_1dComplex64Inv(SEXP gft_c, SEXP ts_len_i, SEXP dt_d,
 	inv_name_s = PROTECT(allocVector(STRSXP, 1)); pcnt++;
 	SET_STRING_ELT(inv_name_s, 0,
 								 mkChar(itype == INV_DYADIC ? "Dyadic" :
-								 itype == INV_FREQ ? "Frequency" : 
+								 itype == INV_FREQ ? "Frequency" :
 								 itype == INV_TIME ? "Time" :"Unknown"));
 
 	/* put the return values into a list */

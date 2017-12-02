@@ -220,7 +220,7 @@ static void phase_shift(DCMPLX *win, int N) {
 }
 
 
-// return the FT of a time-domain sinc windowing function of width N. 
+// return the FT of a time-domain sinc windowing function of width N.
 static DCMPLX *box_dft(int N, int freq) {
 	int ii, lshift, abs_freq = ABS(freq);	// window width is abs_freq if epsilon=0; otherwise, it's wider
 	DCMPLX *win = calloc(N, sizeof( *win ));
@@ -867,7 +867,7 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 
 // make a linear array of all the GFT elements
 DllExport DCLIST *ngft_makeGftArray(FPCOL *fpcol) {
-	int ii, dst_len = 0;
+	int ii, dst_len;
 	DCMPLX *dst = NULL;
 	DCLIST *gft;
 
@@ -875,7 +875,7 @@ DllExport DCLIST *ngft_makeGftArray(FPCOL *fpcol) {
 		oops("ngft_makeGftArray", "Argument exception: fpcol is null");
 
 	// loop over the non-negative (index 0) and the negative (index 1) frequency partition sets
-	for ( ii = 0 ; ii < 2 ; ii++ ) {
+	for ( dst_len = 0, ii = 0 ; ii < 2 ; ii++ ) {
 		int jj;
 		FPSET *fpset = fpcol->fpset + ii;
 		// loop over the frequency partitions in this set
@@ -893,6 +893,36 @@ DllExport DCLIST *ngft_makeGftArray(FPCOL *fpcol) {
 	return gft;
 }
 
+
+// make an array of the starting indices into the GFT array of the
+// positive and negative frequencies
+DllExport int *ngft_getGftArrayIndices(FPCOL *fpcol) {
+  int ii, dst_len, *idx;
+
+  if ( fpcol == NULL )
+    oops("ngft_getGftArrayIndices", "Argument exception: fpcol is null");
+
+  idx = calloc(2, sizeof(*idx));
+
+  // loop over the non-negative (index 0) and the negative (index 1) frequency partition sets
+  for ( dst_len = 0, ii = 0 ; ii < 2 ; ii++ ) {
+    int jj;
+    FPSET *fpset = fpcol->fpset + ii;
+    // loop over the frequency partitions in this set
+    for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
+      FPART *fpart = fpset->partitions + jj;
+      int p_len = fpart->gft->count;
+      if ( ii == 0 && jj == 1 ) {
+        idx[0] = dst_len; // starting index of positive frequencies
+      } else if ( ii == 1 && jj == 0 ) {
+        idx[1] = dst_len; // starting index of positive frequencies
+        break;
+      }
+      dst_len += p_len;
+    }
+  }
+  return idx;
+}
 
 // unpack a linear array of all the GFT elements
 DllExport void ngft_unpackGftArray(DCLIST *gft, FPCOL *fpcol) {
