@@ -1,11 +1,26 @@
+#' Time-series utilities for seismic signal processing
+#'
+#' ngft provides the generalized S transform.
+#'
+#' @details lots of details...
+#'
+"_PACKAGE"
+#> [1] "_PACKAGE"
+
 # these functions should not be exported
 
 # .onLoad is called by loadNamespace, usually via library()
 .onLoad <- function(libname, pkgname) {
   # message(".onLoad: libname=",libname,", pkgname=", pkgname)
-  # don't load ngft if useDynLib directive is used in NAMESPACE file
-  # library.dynam("ngft", pkgname, libname)
-  library.dynam("libfftw3-3", pkgname, libname)
+  # load fft3, unless it's already loaded
+  fft_dll <- "libfftw3-3"
+  # library.dynam("seismic.ts", pkgname, libname)
+  dlls <- getLoadedDLLs()
+  dll_list <- NULL
+  for ( ii in 1:length(dlls) )
+    dll_list <- c(dll_list, dlls[[ii]][["name"]])
+  if ( ! fft_dll %in% dll_list )
+    library.dynam(fft_dll, pkgname, lib.loc=libname)
 }
 
 # .onAttach is called by attachNamespace, usually via library()

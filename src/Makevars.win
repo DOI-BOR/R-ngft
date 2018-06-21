@@ -9,6 +9,7 @@ LIB_FFTW_DIR="C:/Users/CWood/Documents/Code Monkey/Src/Downloads/$(FFTW_DIR_ARCH
 
 LIB_FFTW=fftw3-3
 LIB_FFTW_DLL=$(LIB_FFTW_DIR)/lib$(LIB_FFTW).dll
+LIB_PATH=../libs/x$(WIN)
 
 PKG_CPPFLAGS=-DUSING_R -I$(LIB_FFTW_DIR)
 PKG_LIBS=-L$(LIB_FFTW_DIR) -l$(LIB_FFTW)
@@ -17,4 +18,6 @@ PKG_LIBS=-L$(LIB_FFTW_DIR) -l$(LIB_FFTW)
 all: fftw $(SHLIB)
 
 fftw:
+	@mkdir -p $(LIB_PATH)
+	@cp $(LIB_FFTW_DLL) $(LIB_PATH)
 	@cp $(LIB_FFTW_DLL) .
