@@ -66,6 +66,7 @@ fst <- function(xt, dt=0.01, eps=0.0, win.type=NA, part.type=NA, img.dim=NA,
 							 as.double(xt), as.double(dt), as.double(eps), as.character(part.type),
 							 as.character(win.type), as.integer(img.dim), as.logical(by.part),
 							 as.logical(all.freqs), as.integer(fw.width), as.integer(edo.fref),
-							 as.integer(edo.nd))
+							 as.integer(edo.nd),
+							 PACKAGE="ngft")
 	return(out)
 }

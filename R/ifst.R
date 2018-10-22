@@ -67,6 +67,7 @@ ifst <- function(dst, ts_len, dt=0.01, eps=0.0, win.type=NA, part.type=NA,
                as.complex(dst), as.integer(ts_len), as.double(dt),
                as.double(eps), as.character(part.type), as.character(win.type),
                as.integer(fw.width), as.integer(edo.fref), as.integer(edo.nd),
-               as.character(inv.type))
+               as.character(inv.type),
+               PACKAGE="ngft")
   return(out)
 }
