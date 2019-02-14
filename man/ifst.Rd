@@ -4,8 +4,9 @@
 \alias{ifst}
 \title{Fast Inverse S-Transform}
 \usage{
-ifst(dst, ts_len, dt = 0.01, eps = 0, win.type = NA, part.type = NA,
-  fw.width = NA, edo.fref = NA, edo.nd = NA, inv.type = NA)
+ifst(dst, ts_len, dt = 0.01, eps = 0, win.type = NA,
+  part.type = NA, fw.width = NA, edo.fref = NA, edo.nd = NA,
+  inv.type = NA)
 }
 \arguments{
 \item{dst}{Fast S-transform, as returned by \code{\link{fst}}. Must convert to complex vector.}
