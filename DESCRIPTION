@@ -16,4 +16,4 @@ LazyData: true
 NeedsCompilation: yes
 KeepSource: true
 SystemRequirements: fftw3 (>= 3.1.2)
-RoxygenNote: 6.1.1
+RoxygenNote: 7.1.0
