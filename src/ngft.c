@@ -16,11 +16,12 @@
 # endif
 #include "ngft_proto.h"
 
-
+#ifdef NGFT_VERBOSE_DEBUG
 // return the modulus of a DCMPLX value
 static double modulus( DCMPLX *x ) {
 	return sqrt( x->r*x->r + x->i*x->i );
 }
+#endif
 
 
 // multiply 2 DCMPLX numbers, replacing first DCMPLX with the result
@@ -666,7 +667,7 @@ DllExport FPCOL *ngft_FrequencyPartitions(int N, double epsilon, FreqPartitionTy
 																					int W, int f_ref, int T) {
 	int ii;
 	TPCOL *tpcol;
-	FPCOL *pars;
+	FPCOL *pars = NULL;
 
 	if ( N <= 0 )
 		oops( "ngft_FrequencyPartitions", "Invalid argument: N <= 0" );
@@ -805,7 +806,7 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 		// loop over the partitions in this set
 		for ( jj = 0 ; jj < fpset->pcount ; jj++ ) {
 			int kk;
-			DCMPLX *win, *dst, sum;
+			DCMPLX *win, *dst;
 			DCLIST *gft;
 			FPART *partition = fpset->partitions + jj;
 			int fcenter = INDEX_2_FREQ(partition->center, N);	// need actual frequency, not index
@@ -842,6 +843,7 @@ DllExport FPCOL *ngft_1dComplex64(DCLIST *sig, double epsilon, FreqPartitionType
 
 #ifdef CMPLX64_I_DEBUG
 			if ( W == 1 ) {
+			  DCMPLX sum;
 				for ( sum.r = 0, sum.i = 0, kk = 0 ; kk < win_len ; kk++ ) {
 					sum.r += dst[kk].r;
 					sum.i += dst[kk].i;

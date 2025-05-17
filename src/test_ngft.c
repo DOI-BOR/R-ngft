@@ -1,7 +1,7 @@
-#ifdef TEST_NGFT
-
 #include "ngft.h"
 #include "ngft_proto.h"
+
+#ifdef TEST_NGFT
 
 static double modulus( DCMPLX *x ) {
 	return sqrt( x->r*x->r + x->i*x->i );
