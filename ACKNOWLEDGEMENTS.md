@@ -1,0 +1,1 @@
+This software was developed to meet the Bureau of Reclamation's need to conduct site-specific seismic hazard analyses (PSHA) used in dam-safety risk assessments.

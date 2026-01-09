@@ -1,0 +1,1 @@
+This repo contains the R package ngft (new generalized Fourier transform), which provides an R wrapper and C library that implementing the generalized Stockwell transform (or S transform), and its inverse.
